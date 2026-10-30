@@ -14,7 +14,7 @@
 
 ## Стек
 
-Bun · TypeScript · Elysia · Eden · PostgreSQL · Prisma · Better Auth
+Bun · TypeScript · Elysia · Eden · PostgreSQL · Kysely · Better Auth
 
 ## Запуск через Docker
 
@@ -34,9 +34,6 @@ API: `http://localhost:3000`. Проверка доступности: `GET /hea
 docker compose stop
 ```
 
-> В текущем локальном окружении сборка блокируется сетевой ошибкой загрузки
-> Prisma engine. Полный запуск стека пока не подтверждён; сборка образа в CI проходит.
-
 ## Разработка
 
 Для запуска API вне контейнера нужен Bun 1.4.4.
@@ -44,7 +41,6 @@ docker compose stop
 ```sh
 cp -n .env.example .env
 bun install --frozen-lockfile
-bun run db:generate
 docker compose up -d --wait db
 bun run db:migrate
 bun run db:seed

@@ -14,7 +14,9 @@ if (!result.success)
 if (!result.metafile) throw new Error("Client build metadata is missing");
 const inputs = Object.keys(result.metafile.inputs);
 const forbidden = inputs.filter((path) =>
-  /(^|\/)(apps\/api|prisma|@prisma|elysia)(\/|$)/.test(path),
+  /(^|\/)(apps\/api|prisma|@prisma|elysia|kysely|pg|pg-pool|pg-protocol|pg-types)(\/|$)/.test(
+    path,
+  ),
 );
 if (forbidden.length) {
   throw new Error(

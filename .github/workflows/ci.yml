@@ -43,8 +43,6 @@ jobs:
           bun-version: 1.4.4
       - name: Frozen install
         run: bun install --frozen-lockfile
-      - name: Generate Prisma client
-        run: bun run db:generate
       - name: ESLint and Prettier
         run: bun run check
       - name: Workspace types

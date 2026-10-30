@@ -8,8 +8,8 @@ export function createSqlDatabase(connectionString: string) {
   });
 }
 
-// During the staged port the Prisma connection remains separate; this is the
-// only new connection owner. Kysely.destroy() also closes its pg pool.
+// The application owns this single pool. Kysely.destroy() closes it; callers
+// (including Better Auth) borrow the connection and must not close it separately.
 export type SqlDatabase = Kysely<DB>;
 export type SqlTransaction = Transaction<DB>;
 export type SqlConnection = SqlDatabase | SqlTransaction;

@@ -3,7 +3,7 @@ import {
   defaultProfile,
   publicProfile,
   type ProfileRow,
-} from "@api/modules/profiles/kysely-service";
+} from "@api/modules/profiles/service";
 import { profileSchema } from "@api/modules/profiles/schemas";
 import { TypeCompiler } from "elysia/type-system";
 

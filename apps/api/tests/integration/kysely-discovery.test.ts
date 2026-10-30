@@ -9,14 +9,14 @@ import {
   getMatch,
   listMatches,
   setDecision,
-} from "@api/modules/discovery/kysely-service";
+} from "@api/modules/discovery/service";
 import {
   decisionResultSchema,
   discoveryPageSchema,
   matchPageSchema,
   matchSchema,
 } from "@api/modules/discovery/schemas";
-import { updateProfile } from "@api/modules/profiles/kysely-service";
+import { updateProfile } from "@api/modules/profiles/service";
 import type { ProfilePatch } from "@api/modules/profiles/schemas";
 import { TypeCompiler } from "elysia/type-system";
 import { sql, type KyselyPlugin, type RootOperationNode } from "kysely";

@@ -1,12 +1,9 @@
 import { afterAll, expect, test } from "bun:test";
 import { createSqlDatabase } from "@api/db/kysely";
 import { migrateDatabase } from "@api/db/migrate";
-import { createDirectConversation } from "@api/modules/conversations/kysely-membership";
-import {
-  getMessages,
-  sendMessage,
-} from "@api/modules/conversations/kysely-service";
-import { createConversationStreams } from "@api/modules/conversations/kysely-streams";
+import { createDirectConversation } from "@api/modules/conversations/membership";
+import { getMessages, sendMessage } from "@api/modules/conversations/service";
+import { createConversationStreams } from "@api/modules/conversations/streams";
 import { sql } from "kysely";
 
 const url = process.env.DATABASE_URL;

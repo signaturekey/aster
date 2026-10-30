@@ -12,12 +12,11 @@ RUN bun install --frozen-lockfile --ignore-scripts
 
 FROM dependencies AS tools
 COPY . .
-# Generation needs a syntactically valid URL, not a running database or secrets.
-RUN DATABASE_URL=postgresql://build:build@localhost:5432/aster bun run db:generate \
-    && bun run build:api
+# Kysely needs no code generation, database connection or engine download.
+RUN bun run build:api
 
-# The tools target retains Prisma CLI, schema, migrations and seed source for
-# migration startup and optional in-container integration tests (no host Bun).
+# The tools target retains the committed SQL assets and Bun migration/seed
+# entrypoints for startup and optional in-container tests (no host Bun).
 CMD ["bun", "run", "db:migrate"]
 
 FROM manifests AS production-dependencies
@@ -30,8 +29,6 @@ ENV PORT=3000
 COPY --from=production-dependencies --chown=bun:bun /app/node_modules ./node_modules
 COPY --from=production-dependencies --chown=bun:bun /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=tools --chown=bun:bun /app/apps/api/dist ./apps/api/dist
-# Retain generated runtime assets even when a dependency loads them dynamically.
-COPY --from=tools --chown=bun:bun /app/apps/api/src/generated/prisma ./apps/api/src/generated/prisma
 USER bun
 EXPOSE 3000
 STOPSIGNAL SIGTERM

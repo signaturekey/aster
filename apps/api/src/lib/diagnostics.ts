@@ -6,7 +6,7 @@ type ErrorContext = {
 };
 
 export function logUnexpectedError(error: unknown, context: ErrorContext) {
-  // Exception messages and Prisma metadata can contain SQL, credentials or text.
+  // Exception messages and database metadata can contain SQL, credentials or text.
   // Keep the operation and error classification, never request headers/body/query.
   const kind =
     error instanceof TypeError

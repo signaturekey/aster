@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { createSqlDatabase } from "@api/db/kysely";
 import { migrateDatabase } from "@api/db/migrate";
-import { createSqlAuth } from "@api/modules/identity/kysely-service";
+import { createAuth } from "@api/modules/identity/service";
 import type { Auth } from "@api/modules/identity/service";
 import { sql } from "kysely";
 
@@ -40,7 +40,7 @@ const config = {
   secret: "integration-only-secret-at-least-32-characters",
   trustedOrigins: [origin],
 };
-const auth = createSqlAuth(db, config);
+const auth = createAuth(db, config);
 // Options deliberately differ during the staged port; the public handler,
 // session API and inferred actor/session types must remain route-compatible.
 const routeAuth: Pick<Auth, "handler" | "api" | "$Infer"> = auth;
@@ -275,7 +275,7 @@ test("trusted origins, CSRF protections and HTTPS cookie settings remain enabled
       .id,
   ).toBe(user.user.id);
   const secureOrigin = "https://localhost:3000";
-  const secureAuth = createSqlAuth(db, {
+  const secureAuth = createAuth(db, {
     ...config,
     baseURL: secureOrigin,
     trustedOrigins: [secureOrigin],

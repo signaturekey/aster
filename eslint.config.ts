@@ -4,13 +4,7 @@ import prettier from "eslint-config-prettier/flat";
 import tseslint from "typescript-eslint";
 
 export default defineConfig([
-  globalIgnores([
-    "**/dist/**",
-    "**/coverage/**",
-    "apps/api/src/generated/**",
-    ".claude/**",
-    "docs/**",
-  ]),
+  globalIgnores(["**/dist/**", "**/coverage/**", ".claude/**", "docs/**"]),
   {
     files: ["**/*.ts"],
     extends: [js.configs.recommended, tseslint.configs.recommended],

@@ -6,18 +6,18 @@ import {
   listApplications,
   submitApplication,
   transitionApplication,
-} from "@api/modules/projects/kysely-applications";
+} from "@api/modules/projects/applications";
 import {
   removeMember,
   transferOwnership,
-} from "@api/modules/projects/kysely-membership";
+} from "@api/modules/projects/membership";
 import {
   createProject,
   getProject,
   listMembers,
   listProjects,
   updateProject,
-} from "@api/modules/projects/kysely-service";
+} from "@api/modules/projects/service";
 import {
   applicationSchema,
   memberSchema,

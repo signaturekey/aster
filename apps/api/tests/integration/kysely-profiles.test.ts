@@ -9,7 +9,7 @@ import {
   publicProfile,
   requireCompleteProfile,
   updateProfile,
-} from "@api/modules/profiles/kysely-service";
+} from "@api/modules/profiles/service";
 import type { ProfilePatch } from "@api/modules/profiles/schemas";
 import {
   dictionariesSchema,
