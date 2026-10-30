@@ -69,6 +69,12 @@ Implementation was explicitly approved on 2026-10-30 through the user's Claude C
 - Prisma download investigation remains deferred by the user; cleanup does not resolve task 6.4.
 - Replaced Biome with ESLint + typescript-eslint recommended rules and three type-aware Promise checks, plus Prettier defaults. TypeScript pinned to 6.0.3 because typescript-eslint 8.72.1 supports TypeScript <6.1, not the previously installed 7.0.2. Root check/check:fix commands retained; CI and current tooling documentation updated. Verified frozen install, Prisma generation, lint/formatting, workspace types, 28 unit tests, 39 isolated PostgreSQL integration tests, API/browser-client builds, strict OpenSpec validation, and all three Promise rules against temporary invalid code (removed). Historical Biome evidence above is unchanged. Docker image/startup and hosted Actions were not reverified for this migration; task 6.4 remains open.
 
+## Closure: Superseded on 2026-10-30
+
+The user confirmed archival with warnings, without syncing delta specs. This change is closed as **superseded**, not as fully verified completion: 24/25 tasks remain historically complete, and 6.4 stays unchecked. The latest ordinary local `docker compose up --build -d` failed fetching the official Linux ARM64 Prisma schema-engine checksum (`Socket is closed`); migration/API containers did not start. Latest implementation verification included 30 unit tests, 40 isolated PostgreSQL integration tests and successful hosted checks/image build for `ce68d45` (run 41074519747).
+
+`migrate-prisma-to-kysely` supersedes the Prisma architecture decision and carries forward fresh/existing database migration checks, actual local Compose startup, restart/persistence/shutdown evidence and latest-SHA hosted verification. Old product specifications remain a compatibility reference, not automatically synchronized canonical requirements. No failed check has been marked passed.
+
 ## Workflow Follow-up
 
 - No implementation starts until the user approves the revised documents. Claude Code `/goal` is the user's execution mechanism, not a new tool to build here.

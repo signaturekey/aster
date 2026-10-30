@@ -5,9 +5,11 @@ context: |
   Aster connects IT collaborators for startups, hackathons, and side projects.
   Agreed MVP: accounts/profiles, discovery, mutual matches, projects/applications,
   teams, and private text conversations. Backend only; do not create a web app.
-  Current implementation: single-package Bun/Elysia/Eden health skeleton.
-  Target: modular monolith, Bun workspaces apps/api and packages/api-client,
-  Elysia/TypeBox public schemas, Eden Treaty, PostgreSQL/Prisma migrations,
+  Current implementation: modular backend with implemented product modules,
+  Bun workspaces apps/api, packages/api-client and packages/contracts,
+  Elysia/TypeBox public schemas, Eden Treaty and PostgreSQL/Prisma.
+  New planning target: replace Prisma with Kysely + pg and engine-free migrations,
+  preserving existing data, SQL invariants, API contracts and auth sessions,
   Better Auth email/password with database sessions and HttpOnly cookies.
   No OAuth, SMTP, email verification, or password recovery in this local MVP.
   Full local stack via Dockerfile and Docker Compose; HTTP + SSE, single instance.
@@ -18,8 +20,11 @@ context: |
   or deployment. Conventional Commits is an agent rule, not a CI-enforced rule.
   Git target: main at https://github.com/signaturekey/aster, small commits and pushes
   after implementation approval. Actual green Actions is required for completion.
-  Implementation was explicitly approved on 2026-10-30 through Claude Code /goal.
-  Implementation, scoped local verification, coherent commits and pushes are authorized.
+  The MVP change was archived as superseded on 2026-10-30 with 24/25 verified tasks;
+  its local Prisma Docker engine download still fails, so startup was not verified.
+  Kysely implementation was explicitly approved after grilling on 2026-10-30,
+  including one-time project-only work/test DB reset and small commits/pushes.
+  Preserve API behavior; use snake_case SQL baseline, handwritten types, no legacy adoption.
   docs/backlog.md contains deferred ideas, not requirements for this goal.
   Main specs describe implemented behavior; proposed additions belong in changes.
 

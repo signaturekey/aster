@@ -5,7 +5,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 ## Approval and scope
 
 - Implementation was explicitly approved on 2026-10-30 through the user's Claude Code `/goal` directive to execute the OpenSpec tasks. Document readiness alone is not implementation approval.
-- Read `openspec/changes/define-it-matchmaking-mvp/` before implementation. Keep `tasks.md` honest: check a task only after its work and stated verification pass.
+- Current planning change: `openspec/changes/migrate-prisma-to-kysely/`. Implementation was explicitly approved after grilling on 2026-10-30; use small verified commits and push each coherent slice. The former MVP change is archived at `openspec/changes/archive/2026-10-30-define-it-matchmaking-mvp/` as superseded with 24/25 historical tasks verified; its local Docker check never passed. Keep `tasks.md` honest: check a task only after its work and stated verification pass.
 - Scope: a locally runnable backend and shared API client. Do not create `apps/web`, select a frontend framework, implement a mobile app, or deploy anything.
 - Deferred ideas are stored locally in Git-ignored `docs/backlog.md`. Read it directly when needed; ignore-aware searches may omit it, and fresh clones will not contain it. If absent, do not recreate it or infer additional scope. Do not implement backlog items without approval.
 - Canonical `openspec/specs/` describes implemented behavior. Do not sync or archive unimplemented requirements.
@@ -19,7 +19,7 @@ Approved implementation direction:
 - Bun workspaces: `apps/api` and `packages/api-client`; reserve `apps/web` for later.
 - Modular monolith: one API process and PostgreSQL. Modules: identity, profiles, discovery/matches, projects/teams, conversations.
 - Elysia + its TypeBox schemas for request validation and explicit public responses; Eden Treaty for the client. No duplicate DTO interfaces, Zod layer, or generated OpenAPI SDK.
-- Prisma schema, generated client, and reviewed SQL migrations; PostgreSQL via the supported Prisma driver adapter. Parameterized raw SQL is allowed for locks and specialized queries.
+- Current implementation still uses Prisma. The user selected Kysely + pg as its replacement; implementation is now approved after grilling. Preserve existing data, SQL constraints, auth sessions and public contracts; do not reset the working database. Parameterized SQL remains allowed for locks and specialized queries.
 - Better Auth email/password, database-backed sessions, HttpOnly cookies, no cookie cache initially. No OAuth, email verification, SMTP, or password-reset flow in this local MVP.
 - HTTP message writes/history plus authenticated SSE events. Single-instance API; no Socket.IO, Redis, presence, typing indicators, or read receipts.
 - Dockerfile for the API and Docker Compose for the complete local stack, including migration startup. Normal container startup must not require Bun on the host.
