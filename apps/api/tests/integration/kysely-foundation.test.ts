@@ -133,3 +133,40 @@ test("dictionary seeding is repeatable and creates no demo product data", async 
   ]);
   expect(await db.selectFrom("messages").select("id").execute()).toEqual([]);
 });
+
+test("seed failure rolls back earlier dictionary updates", async () => {
+  const { seedSqlDictionaries } = await import("@api/db/kysely-seed");
+  await db
+    .updateTable("specializations")
+    .set({ label: "Before failed seed" })
+    .where("id", "=", "backend")
+    .execute();
+  const observed = db.withPlugin({
+    transformQuery(args) {
+      if (
+        args.node.kind === "InsertQueryNode" &&
+        args.node.into?.table.identifier.name === "goals"
+      )
+        throw new Error("Injected seed failure");
+      return args.node;
+    },
+    async transformResult(args) {
+      return args.result;
+    },
+  });
+  // Bun's rejection assertions return a promise despite their void declaration.
+  // eslint-disable-next-line @typescript-eslint/await-thenable
+  await expect(seedSqlDictionaries(observed)).rejects.toThrow(
+    "Injected seed failure",
+  );
+  expect(
+    (
+      await db
+        .selectFrom("specializations")
+        .select("label")
+        .where("id", "=", "backend")
+        .executeTakeFirstOrThrow()
+    ).label,
+  ).toBe("Before failed seed");
+  await seedSqlDictionaries(db);
+});

@@ -9,7 +9,7 @@ test("diagnostics retain operation and error classification without private exce
   try {
     const error = Object.assign(
       new Error("postgresql://user:secret@localhost/db SELECT private_text"),
-      { code: "P2028" },
+      { code: "23505" },
     );
     logUnexpectedError(error, { operation: "sse.delivery" });
     expect(log).toHaveBeenCalledWith(
@@ -17,7 +17,7 @@ test("diagnostics retain operation and error classification without private exce
         level: "error",
         operation: "sse.delivery",
         kind: "Error",
-        code: "P2028",
+        code: "23505",
       }),
     );
     logUnexpectedError(
