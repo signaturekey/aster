@@ -8,11 +8,11 @@ Keep the backend contract browser-safe and verifiable while delivering a complet
 
 ### Requirement: Shared typed API client
 
-The backend SHALL expose route-derived request, success, and error types through a shared client package without duplicate DTO interfaces. A separate consumer fixture SHALL verify the contract without requiring a frontend application. Type-only access SHALL NOT bundle server runtime or database code into a browser build.
+The backend SHALL expose route-derived request, success, and error types through a shared client package without duplicate DTO interfaces. Workspace type checking SHALL validate the shared client without requiring a frontend application or a separate consumer fixture. Type-only access SHALL NOT bundle server runtime or database code into a browser build.
 
 #### Scenario: Contract changes
 
-- **WHEN** an API response field used by the client fixture is incompatibly changed
+- **WHEN** an API response field used by typed client code is incompatibly changed
 - **THEN** workspace type checking fails at the incompatible usage
 
 #### Scenario: Browser-target client build

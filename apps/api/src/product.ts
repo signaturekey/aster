@@ -1,19 +1,19 @@
-import cors from "@elysiajs/cors";
-import { Elysia, t } from "elysia";
-import type { Database } from "./db/client";
-import { errorBody, errorResponses, ProductError } from "./lib/errors";
-import { identityGuard } from "./modules/identity/routes";
-import type { Auth } from "./modules/identity/service";
+import type { Database } from "@api/db/client";
+import { errorBody, errorResponses, ProductError } from "@api/lib/errors";
+import { identityGuard } from "@api/modules/identity/routes";
+import type { Auth } from "@api/modules/identity/service";
 import {
   dictionariesSchema,
   profilePatchSchema,
   profileSchema,
-} from "./modules/profiles/schemas";
+} from "@api/modules/profiles/schemas";
 import {
   getDictionaries,
   getProfile,
   updateProfile,
-} from "./modules/profiles/service";
+} from "@api/modules/profiles/service";
+import cors from "@elysiajs/cors";
+import { Elysia, t } from "elysia";
 
 export function productRoutes(
   db: Database,

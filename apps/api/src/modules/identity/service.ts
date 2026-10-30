@@ -1,6 +1,6 @@
+import type { Database } from "@api/db/client";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import type { Database } from "../../db/client";
 
 export function createAuth(
   db: Database,

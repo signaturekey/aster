@@ -1,9 +1,9 @@
 import { afterAll, expect, test } from "bun:test";
+import { isConversationEvent } from "@api/events";
+import { errorBody, ProductError } from "@api/lib/errors";
+import { conversationRoutes } from "@api/modules/conversations/routes";
+import { createConversationStreams } from "@api/modules/conversations/streams";
 import { Elysia } from "elysia";
-import { isConversationEvent } from "../../src/events";
-import { errorBody, ProductError } from "../../src/lib/errors";
-import { conversationRoutes } from "../../src/modules/conversations/routes";
-import { createConversationStreams } from "../../src/modules/conversations/streams";
 import {
   auth,
   db,

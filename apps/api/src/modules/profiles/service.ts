@@ -1,7 +1,10 @@
-import type { Database } from "../../db/client";
-import type { Prisma } from "../../generated/prisma/client";
-import { ProductError } from "../../lib/errors";
-import type { ProfilePatch, PublicProfile } from "./schemas";
+import type { Database } from "@api/db/client";
+import type { Prisma } from "@api/generated/prisma/client";
+import { ProductError } from "@api/lib/errors";
+import type {
+  ProfilePatch,
+  PublicProfile,
+} from "@api/modules/profiles/schemas";
 
 // Never load User, Account, or Session relations into a public profile read.
 export const profileSelect = {

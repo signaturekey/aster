@@ -1,15 +1,17 @@
-import { Elysia } from "elysia";
-import type { Database } from "../../db/client";
-import { errorResponses } from "../../lib/errors";
-import { pageQuerySchema } from "../../lib/pagination";
-import { identityGuard } from "../identity/routes";
-import type { Auth } from "../identity/service";
+import type { Database } from "@api/db/client";
+import { errorResponses } from "@api/lib/errors";
+import { pageQuerySchema } from "@api/lib/pagination";
+import { identityGuard } from "@api/modules/identity/routes";
+import type { Auth } from "@api/modules/identity/service";
 import {
   listApplications,
   submitApplication,
   transitionApplication,
-} from "./applications";
-import { removeMember, transferOwnership } from "./membership";
+} from "@api/modules/projects/applications";
+import {
+  removeMember,
+  transferOwnership,
+} from "@api/modules/projects/membership";
 import {
   applicationCreateSchema,
   applicationPageSchema,
@@ -24,14 +26,15 @@ import {
   projectSchema,
   removedSchema,
   transferSchema,
-} from "./schemas";
+} from "@api/modules/projects/schemas";
 import {
   createProject,
   getProject,
   listMembers,
   listProjects,
   updateProject,
-} from "./service";
+} from "@api/modules/projects/service";
+import { Elysia } from "elysia";
 
 /** Authenticated project catalogue, recruitment, private applications and teams.
  * Collections use {items,nextCursor}, newest (createdAt,id) first, default 20,

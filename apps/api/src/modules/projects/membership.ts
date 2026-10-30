@@ -1,11 +1,11 @@
-import type { Database } from "../../db/client";
-import { ProductError } from "../../lib/errors";
+import type { Database } from "@api/db/client";
+import { ProductError } from "@api/lib/errors";
 import {
   lockProject,
   projectSelect,
   publicProject,
   requireOwner,
-} from "./service";
+} from "@api/modules/projects/service";
 
 export async function removeMember(
   db: Database,

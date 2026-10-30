@@ -1,7 +1,7 @@
-import type { Database } from "../../db/client";
-import type { ConversationEvent } from "../../events";
-import { ProductError } from "../../lib/errors";
-import { requireConversationMember } from "./service";
+import type { Database } from "@api/db/client";
+import type { ConversationEvent } from "@api/events";
+import { ProductError } from "@api/lib/errors";
+import { requireConversationMember } from "@api/modules/conversations/service";
 
 const MAX_QUEUED_EVENTS = 32;
 const HEARTBEAT_MS = 15_000;

@@ -1,18 +1,22 @@
-import { Elysia } from "elysia";
-import type { Database } from "../../db/client";
-import { errorResponses } from "../../lib/errors";
-import { pageQuerySchema } from "../../lib/pagination";
-import { identityGuard } from "../identity/routes";
-import type { Auth } from "../identity/service";
+import type { Database } from "@api/db/client";
+import { errorResponses } from "@api/lib/errors";
+import { pageQuerySchema } from "@api/lib/pagination";
 import {
   conversationPageSchema,
   conversationParamsSchema,
   messagePageSchema,
   messageSchema,
   sendMessageSchema,
-} from "./schemas";
-import { getMessages, listConversations, sendMessage } from "./service";
-import { createConversationStreams } from "./streams";
+} from "@api/modules/conversations/schemas";
+import {
+  getMessages,
+  listConversations,
+  sendMessage,
+} from "@api/modules/conversations/service";
+import { createConversationStreams } from "@api/modules/conversations/streams";
+import { identityGuard } from "@api/modules/identity/routes";
+import type { Auth } from "@api/modules/identity/service";
+import { Elysia } from "elysia";
 
 // Mount under /api/v1, inside the product error/CORS boundary.
 export function conversationRoutes(

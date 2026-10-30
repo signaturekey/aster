@@ -1,6 +1,6 @@
-import { createApp } from "../../src/app";
-import { createDatabase } from "../../src/db/client";
-import { createAuth } from "../../src/modules/identity/service";
+import { createApp } from "@api/app";
+import { createDatabase } from "@api/db/client";
+import { createAuth } from "@api/modules/identity/service";
 
 if (
   process.env.ASTER_INTEGRATION !== "1" ||

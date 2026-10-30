@@ -1,7 +1,7 @@
-import { createApp } from "./app";
-import { createDatabase } from "./db/client";
-import { createConversationStreams } from "./modules/conversations/streams";
-import { createAuth } from "./modules/identity/service";
+import { createApp } from "@api/app";
+import { createDatabase } from "@api/db/client";
+import { createConversationStreams } from "@api/modules/conversations/streams";
+import { createAuth } from "@api/modules/identity/service";
 
 const databaseURL = process.env.DATABASE_URL;
 const secret = process.env.BETTER_AUTH_SECRET;

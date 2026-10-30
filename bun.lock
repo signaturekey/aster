@@ -29,12 +29,6 @@
         "prisma": "7.10.1",
       },
     },
-    "fixtures/api-consumer": {
-      "name": "@aster/api-consumer-fixture",
-      "devDependencies": {
-        "@aster/api-client": "workspace:*",
-      },
-    },
     "packages/api-client": {
       "name": "@aster/api-client",
       "version": "0.1.0",
@@ -59,8 +53,6 @@
     "@aster/api": ["@aster/api@workspace:apps/api"],
 
     "@aster/api-client": ["@aster/api-client@workspace:packages/api-client"],
-
-    "@aster/api-consumer-fixture": ["@aster/api-consumer-fixture@workspace:fixtures/api-consumer"],
 
     "@aster/contracts": ["@aster/contracts@workspace:packages/contracts"],
 

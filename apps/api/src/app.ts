@@ -1,11 +1,11 @@
+import type { Database } from "@api/db/client";
+import { conversationRoutes } from "@api/modules/conversations/routes";
+import { createConversationStreams } from "@api/modules/conversations/streams";
+import { discoveryRoutes } from "@api/modules/discovery/routes";
+import type { Auth } from "@api/modules/identity/service";
+import { projectRoutes } from "@api/modules/projects/routes";
+import { productRoutes } from "@api/product";
 import { Elysia, t } from "elysia";
-import type { Database } from "./db/client";
-import { conversationRoutes } from "./modules/conversations/routes";
-import { createConversationStreams } from "./modules/conversations/streams";
-import { discoveryRoutes } from "./modules/discovery/routes";
-import type { Auth } from "./modules/identity/service";
-import { projectRoutes } from "./modules/projects/routes";
-import { productRoutes } from "./product";
 
 const health = () =>
   new Elysia({ normalize: false }).get(

@@ -47,7 +47,7 @@ jobs:
         run: bun run db:generate
       - name: Biome
         run: bun run check
-      - name: Workspace and consumer types
+      - name: Workspace types
         run: bun run typecheck
       - name: Unit tests
         run: bun run test:unit

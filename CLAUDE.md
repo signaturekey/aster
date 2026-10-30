@@ -12,7 +12,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## Current state and target architecture
 
-Currently only `GET /health` exists in Bun workspaces: `apps/api/src/app.ts`, `apps/api/src/index.ts`, `apps/api/tests/unit/health.test.ts`, and `packages/api-client/src/index.ts`. A separate contract consumer fixture and GitHub Actions workflow are configured. PostgreSQL/Prisma dictionaries, committed migrations, isolated integration infrastructure and Docker/Compose configuration exist. Full local image build/startup is blocked on the Prisma engine download; see `CONTAINERS.md` and the task evidence. Better Auth database sessions, profiles/dictionaries, discovery/matches, project teams/applications, durable text conversations and SSE are implemented. See `API.md` for implemented contracts. Runtime SSE schemas live in browser-safe `packages/contracts`; the API contract remains type-only.
+The backend lives in `apps/api`, with the shared client in `packages/api-client`. GitHub Actions and workspace type checks are configured. The standalone consumer fixture was removed at the user’s request. PostgreSQL/Prisma dictionaries, committed migrations, isolated integration infrastructure and Docker/Compose configuration exist. Full local image build/startup is blocked on the Prisma engine download; see `docs/containers.md` (local, Git-ignored) and the task evidence. Better Auth database sessions, profiles/dictionaries, discovery/matches, project teams/applications, durable text conversations and SSE are implemented. See `docs/API.md` (local, Git-ignored) for implemented contracts. Runtime SSE schemas live in browser-safe `packages/contracts`; the API contract remains type-only.
 
 Approved implementation direction:
 
@@ -30,7 +30,8 @@ Approved implementation direction:
 - Use small modules: routes for HTTP/auth/schema boundaries, services for business operations and transactions, schemas for public contracts. Extract query files when useful, not by default.
 - Do not introduce generic repositories, DI containers, event buses, or speculative abstraction layers.
 - Chain Elysia route/plugin definitions and export the final inferred `App` type without starting a server. Do not widen it to bare `Elysia`.
-- Use extensionless relative imports for contract-reachable backend files so future web aliases cannot collide. The old root `@/` alias has been removed.
+- Use extensionless, package-specific aliases such as `@api/*` for backend source instead of deep relative imports or an ambiguous shared `@/*` alias.
+- Keep the shared TypeScript baseline package-agnostic. Define aliases in the owning package's config, not globally. A package that follows another package's source type graph must explicitly map the aliases it encounters: `apps/api` maps `@api/*` to `./src/*`, and `packages/api-client` maps it to `../../apps/api/src/*` because it consumes the inferred API contract. Small explicit duplication is preferable to leaking backend configuration into unrelated packages. Verify alias changes with workspace type checks, Bun tests, and API/browser-client builds.
 - Export `@aster/api/contract` as types only. `@aster/api-client` must not import the API runtime or Prisma into browser bundles.
 - Use per-package TypeScript configs extending a shared baseline after migration. `bun build` does not replace type checking.
 - Never expose Prisma rows directly: select public fields, serialize timestamps to ISO strings, and exclude email/private account data from other users' responses.
@@ -55,7 +56,7 @@ Do not commit secrets, read unrelated credentials, publish packages/images, buy 
 
 ## Verification and completion
 
-Current root commands (workspace checks include the standalone client consumer fixture):
+Current root commands (workspace type checks; no standalone consumer fixture):
 
 ```sh
 bun run db:generate

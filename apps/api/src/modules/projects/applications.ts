@@ -1,15 +1,18 @@
-import type { Database } from "../../db/client";
-import type { Prisma } from "../../generated/prisma/client";
-import { ProductError } from "../../lib/errors";
-import { requireCompleteProfile } from "../profiles/service";
-import type { PageQuery, PublicApplication } from "./schemas";
+import type { Database } from "@api/db/client";
+import type { Prisma } from "@api/generated/prisma/client";
+import { ProductError } from "@api/lib/errors";
+import { requireCompleteProfile } from "@api/modules/profiles/service";
+import type {
+  PageQuery,
+  PublicApplication,
+} from "@api/modules/projects/schemas";
 import {
   beforeCursor,
   lockProject,
   pageOptions,
   pageResult,
   requireOwner,
-} from "./service";
+} from "@api/modules/projects/service";
 
 const applicationSelect = {
   id: true,

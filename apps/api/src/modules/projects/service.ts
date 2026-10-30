@@ -1,15 +1,18 @@
-import type { Database } from "../../db/client";
-import type { Prisma } from "../../generated/prisma/client";
-import { ProductError } from "../../lib/errors";
-import { decodeCursor, encodeCursor } from "../../lib/pagination";
-import { getProfile, requireCompleteProfile } from "../profiles/service";
+import type { Database } from "@api/db/client";
+import type { Prisma } from "@api/generated/prisma/client";
+import { ProductError } from "@api/lib/errors";
+import { decodeCursor, encodeCursor } from "@api/lib/pagination";
+import {
+  getProfile,
+  requireCompleteProfile,
+} from "@api/modules/profiles/service";
 import type {
   PageQuery,
   ProjectCreate,
   ProjectPatch,
   PublicMember,
   PublicProject,
-} from "./schemas";
+} from "@api/modules/projects/schemas";
 
 export const projectSelect = {
   id: true,

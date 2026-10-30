@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { decodeCursor, encodeCursor } from "../../src/lib/pagination";
+import { decodeCursor, encodeCursor } from "@api/lib/pagination";
 
 test("cursor preserves timestamp and deterministic id tie-breaker", () => {
   const row = {

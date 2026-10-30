@@ -1,5 +1,5 @@
-import { createDatabase } from "../src/db/client";
-import { seedDictionaries } from "../src/db/seed";
+import { createDatabase } from "@api/db/client";
+import { seedDictionaries } from "@api/db/seed";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required for seeding");

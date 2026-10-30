@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
+import { createDatabase } from "@api/db/client";
+import { seedDictionaries } from "@api/db/seed";
 import { dictionaries } from "../../prisma/dictionaries";
-import { createDatabase } from "../../src/db/client";
-import { seedDictionaries } from "../../src/db/seed";
 
 const url = process.env.DATABASE_URL;
 if (

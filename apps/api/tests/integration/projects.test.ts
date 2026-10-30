@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type {
   PublicApplication,
   PublicProject,
-} from "../../src/modules/projects/schemas";
+} from "@api/modules/projects/schemas";
 import { db, register, request } from "./helpers";
 
 const projectInput = {

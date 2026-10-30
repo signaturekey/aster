@@ -1,13 +1,13 @@
-import type { Database } from "../../db/client";
-import { Prisma } from "../../generated/prisma/client";
-import { ProductError } from "../../lib/errors";
-import { decodeCursor, encodeCursor } from "../../lib/pagination";
+import type { Database } from "@api/db/client";
+import { Prisma } from "@api/generated/prisma/client";
+import { ProductError } from "@api/lib/errors";
+import { decodeCursor, encodeCursor } from "@api/lib/pagination";
+import type { DiscoveryQuery } from "@api/modules/discovery/schemas";
 import {
   profileSelect,
   publicProfile,
   requireCompleteProfile,
-} from "../profiles/service";
-import type { DiscoveryQuery } from "./schemas";
+} from "@api/modules/profiles/service";
 
 const matchSelect = {
   id: true,

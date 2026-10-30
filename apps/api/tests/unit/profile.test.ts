@@ -1,12 +1,12 @@
 import { describe, expect, expectTypeOf, it } from "bun:test";
-import { TypeCompiler } from "elysia/type-system";
 import {
   dictionariesSchema,
   type ProfilePatch,
   profilePatchSchema,
   profileSchema,
-} from "../../src/modules/profiles/schemas";
-import { publicProfile } from "../../src/modules/profiles/service";
+} from "@api/modules/profiles/schemas";
+import { publicProfile } from "@api/modules/profiles/service";
+import { TypeCompiler } from "elysia/type-system";
 
 const patchValidator = TypeCompiler.Compile(profilePatchSchema);
 const profileValidator = TypeCompiler.Compile(profileSchema);

@@ -68,9 +68,9 @@ export const createApiClient = (baseUrl: string) => treaty<App>(baseUrl);
 
 The client declares Eden as a runtime dependency and the API workspace as a type-only development dependency. The API does not depend on the client. If shared runtime event schemas are needed, define them in a browser-safe contract file with explicit exports, not by importing the server app at runtime; avoid cyclic workspace dependencies.
 
-Type-only imports prevent runtime bundling, but TypeScript still follows the server type graph. Replace contract-reachable API `@/` imports with relative paths or an unambiguous API namespace during migration. Do not let a future web-local `@/` resolve server imports incorrectly. Use a shared TypeScript baseline and per-package configs with explicit Bun/browser environments. Keep compatible pinned Elysia/Eden versions and one coherent Elysia type graph.
+Type-only imports prevent runtime bundling, but TypeScript still follows the server type graph. Use `@api/*` for backend source, mapped in the API config and explicitly in the API-client config for its server type graph; keep the shared TypeScript baseline package-agnostic. Do not let a future web-local `@/` resolve server imports incorrectly. Use a shared TypeScript baseline and per-package configs with explicit Bun/browser environments. Keep compatible pinned Elysia/Eden versions and one coherent Elysia type graph.
 
-Use a standalone compile-time consumer fixture and browser-target client build, not a web application or smoke suite. Verify no `any` escape, incompatible-field assertions fail as intended, and no server/Prisma runtime enters the browser bundle. Database models stay internal; response schemas select fields and timestamps serialize as ISO strings.
+Use workspace client type checking and a browser-target client build, not a web application or smoke suite. The standalone consumer fixture was explicitly removed by the user on 2026-10-30; do not recreate it. Verify no server/Prisma runtime enters the browser bundle. Database models stay internal; response schemas select fields and timestamps serialize as ISO strings.
 
 ### 3. Prisma and Transaction Discipline
 
@@ -144,7 +144,7 @@ Add GitHub Actions in the first implementation slices for pushes to `main` and p
 1. frozen lockfile install;
 2. Prisma generation once introduced;
 3. Biome;
-4. workspace TypeScript checks and client contract fixture;
+4. workspace TypeScript checks;
 5. unit tests;
 6. committed migrations on clean PostgreSQL service database and integration tests;
 7. API and browser-safe client builds;
@@ -199,7 +199,7 @@ For retried acceptance, authenticate/authorize first. Returning the already comm
 ## Risks / Trade-offs
 
 - [Broad backend scope] → Small vertical slices with unit/integration tests and documentation in each commit group.
-- [Cross-workspace server type graph] → Type-only exports, resolvable imports, explicit client fixture and browser-target build.
+- [Cross-workspace server type graph] → Type-only exports, resolvable imports, workspace client type checking and browser-target build.
 - [Concurrent state changes] → Constraints, coordinated locks/isolation, bounded retries, and real-PostgreSQL race tests.
 - [Single-instance SSE is lossy] → Durable history and reconnect recovery; scaling ideas stay in the backlog.
 - [No smoke/E2E acceptance] → Do not claim full deployed-stack journey coverage from in-process integration tests or image builds.

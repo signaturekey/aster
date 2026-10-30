@@ -8,8 +8,7 @@
   },
   "workspaces": [
     "apps/*",
-    "packages/*",
-    "fixtures/*"
+    "packages/*"
   ],
   "scripts": {
     "dev": "bun run --filter @aster/api dev",

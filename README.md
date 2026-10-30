@@ -4,14 +4,13 @@
 Реализация MVP выполняется по `openspec/changes/define-it-matchmaking-mvp/`.
 Реализованы accounts/profiles, discovery/matches, проекты/заявки/команды,
 приватные текстовые conversations и authenticated SSE. Контракты и лимиты —
-[API.md](API.md). `GET /health` не требует БД. Это локальный MVP, не public-ready service.
+`docs/API.md` (локальная документация, не хранится в Git). `GET /health` не требует БД. Это локальный MVP, не public-ready service.
 Frontend, мобильное приложение и deployment не входят в этот change.
 
 ## Стек и установка
 
 Bun **1.4.4**, Elysia **1.4.30**, Eden **1.4.10**, strict TypeScript и Biome.
-Версия Bun закреплена в `.bun-version` и `packageManager`. Пакеты устанавливаются
-из публичного npm registry (проектный `bunfig.toml`).
+Версия Bun указана в `packageManager`, CI и Dockerfile.
 
 ```sh
 bun install --frozen-lockfile
@@ -42,13 +41,12 @@ packages/contracts/          # Browser-safe TypeBox SSE schema/type
 packages/api-client/
   src/index.ts                # Browser-safe Eden client
   tests/client.test.ts        # Передача fetch/credentials
-fixtures/api-consumer/        # Отдельный TypeScript-потребитель, не frontend
 scripts/build-client.ts      # Browser build с проверкой входных модулей
 openspec/                    # План и реализованные спецификации
 ```
 
 Все пакеты используют общий strict baseline и собственные TypeScript configs.
-В контракте нет неоднозначного backend-алиаса `@/`.
+Backend использует `@api/*` → `apps/api/src/*`; mapping задан в конфигах API и API-client, общий baseline не содержит package-specific aliases.
 
 ## API и общий клиент
 
@@ -68,26 +66,25 @@ console.log(data.status); // "ok"
 
 `@aster/api/contract` имеет только `types` export. API — devDependency клиента,
 а не runtime dependency. Browser build проверяет, что в bundle есть Eden HTTP,
-но нет Elysia server, API или Prisma runtime. Отдельный consumer fixture проверяет
-inferred request/response/error types, отсутствие `any` и негативные assertions.
+но нет Elysia server, API или Prisma runtime. Отдельный consumer fixture удалён по решению пользователя; workspace type checks и существующие тесты клиента сохранены.
 Cookie-сессии и trusted-origin credentialed CORS реализованы. Для host dev нужны
 `DATABASE_URL`, `BETTER_AUTH_SECRET` (32+ символа), `BETTER_AUTH_URL` и `TRUSTED_ORIGINS`;
 безопасные local-only примеры в `.env.example`.
 
 ## Команды
 
-| Команда                | Назначение                                                 |
-| ---------------------- | ---------------------------------------------------------- |
-| `bun run dev`          | API с watch                                                |
-| `bun run start`        | Собранный API                                              |
-| `bun run check`        | Biome                                                      |
-| `bun run check:fix`    | Форматирование и автоисправления                           |
-| `bun run typecheck`    | Root scripts, API, client, client tests и consumer fixture |
-| `bun run test:unit`    | Unit/in-process тесты без listener и БД                    |
-| `bun run test:watch`   | Watch тестов                                               |
-| `bun run build`        | API и проверяемая browser-сборка клиента                   |
-| `bun run build:api`    | Bun bundle в `apps/api/dist/`                              |
-| `bun run build:client` | Browser bundle в `packages/api-client/dist/`               |
+| Команда                | Назначение                                   |
+| ---------------------- | -------------------------------------------- |
+| `bun run dev`          | API с watch                                  |
+| `bun run start`        | Собранный API                                |
+| `bun run check`        | Biome                                        |
+| `bun run check:fix`    | Форматирование и автоисправления             |
+| `bun run typecheck`    | Root scripts, API, client и client tests     |
+| `bun run test:unit`    | Unit/in-process тесты без listener и БД      |
+| `bun run test:watch`   | Watch тестов                                 |
+| `bun run build`        | API и проверяемая browser-сборка клиента     |
+| `bun run build:api`    | Bun bundle в `apps/api/dist/`                |
+| `bun run build:client` | Browser bundle в `packages/api-client/dist/` |
 
 `bun build` не заменяет проверку TypeScript. Перед коммитом:
 
@@ -126,7 +123,7 @@ Engineering-default seed IDs (`apps/api/prisma/dictionaries.ts`):
 
 ## Контейнеры и integration tests
 
-Полные инструкции — [CONTAINERS.md](CONTAINERS.md). Конфигурация обычного запуска:
+Полные инструкции — `docs/containers.md` (локальный файл, отсутствует в свежем clone). Конфигурация обычного запуска:
 
 ```sh
 docker compose up --build

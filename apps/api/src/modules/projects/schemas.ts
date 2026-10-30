@@ -1,6 +1,6 @@
+import type { pageQuerySchema } from "@api/lib/pagination";
+import { profileSchema } from "@api/modules/profiles/schemas";
 import { t } from "elysia";
-import type { pageQuerySchema } from "../../lib/pagination";
-import { profileSchema } from "../profiles/schemas";
 
 const idSchema = t.String({ minLength: 1, maxLength: 128 });
 const dictionaryIdSchema = t.String({ minLength: 1, maxLength: 80 });

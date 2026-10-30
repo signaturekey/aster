@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { encodeCursor } from "../../src/lib/pagination";
-import { discover } from "../../src/modules/discovery/service";
+import { encodeCursor } from "@api/lib/pagination";
+import { discover } from "@api/modules/discovery/service";
 import { db, register, request } from "./helpers";
 
 async function participant(discoverable = true) {

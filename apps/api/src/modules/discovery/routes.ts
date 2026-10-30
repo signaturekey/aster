@@ -1,9 +1,6 @@
-import { Elysia, t } from "elysia";
-import type { Database } from "../../db/client";
-import { errorResponses } from "../../lib/errors";
-import { pageQuerySchema } from "../../lib/pagination";
-import { identityGuard } from "../identity/routes";
-import type { Auth } from "../identity/service";
+import type { Database } from "@api/db/client";
+import { errorResponses } from "@api/lib/errors";
+import { pageQuerySchema } from "@api/lib/pagination";
 import {
   decisionResultSchema,
   decisionSchema,
@@ -11,8 +8,16 @@ import {
   discoveryQuerySchema,
   matchPageSchema,
   matchSchema,
-} from "./schemas";
-import { discover, getMatch, listMatches, setDecision } from "./service";
+} from "@api/modules/discovery/schemas";
+import {
+  discover,
+  getMatch,
+  listMatches,
+  setDecision,
+} from "@api/modules/discovery/service";
+import { identityGuard } from "@api/modules/identity/routes";
+import type { Auth } from "@api/modules/identity/service";
+import { Elysia, t } from "elysia";
 
 export function discoveryRoutes(db: Database, auth: Auth, origins: string[]) {
   return new Elysia({ prefix: "/api/v1", normalize: false })

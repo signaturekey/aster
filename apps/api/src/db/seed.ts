@@ -1,5 +1,5 @@
+import type { Database } from "@api/db/client";
 import { dictionaries } from "../../prisma/dictionaries";
-import type { Database } from "./client";
 
 export async function seedDictionaries(db: Database) {
   await db.$transaction([

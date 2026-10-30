@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { requireCompleteProfile } from "../../src/modules/profiles/service";
+import { requireCompleteProfile } from "@api/modules/profiles/service";
 import { db, register, request } from "./helpers";
 
 afterAll(() => db.$disconnect());

@@ -1,7 +1,7 @@
-import type { Database } from "../../db/client";
-import type { Prisma } from "../../generated/prisma/client";
-import { ProductError } from "../../lib/errors";
-import { decodeCursor, encodeCursor } from "../../lib/pagination";
+import type { Database } from "@api/db/client";
+import type { Prisma } from "@api/generated/prisma/client";
+import { ProductError } from "@api/lib/errors";
+import { decodeCursor, encodeCursor } from "@api/lib/pagination";
 
 export type ConversationTransaction = Prisma.TransactionClient;
 

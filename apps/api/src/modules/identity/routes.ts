@@ -1,6 +1,6 @@
+import { ProductError } from "@api/lib/errors";
+import type { Auth } from "@api/modules/identity/service";
 import { Elysia } from "elysia";
-import { ProductError } from "../../lib/errors";
-import type { Auth } from "./service";
 
 export function identityGuard(auth: Auth, trustedOrigins: string[]) {
   return new Elysia({ name: "identity-guard" }).resolve(

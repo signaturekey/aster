@@ -1,5 +1,5 @@
+import { ProductError } from "@api/lib/errors";
 import { t } from "elysia";
-import { ProductError } from "./errors";
 
 export const pageQuerySchema = t.Object({
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 50, default: 20 })),

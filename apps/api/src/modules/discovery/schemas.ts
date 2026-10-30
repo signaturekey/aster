@@ -1,5 +1,5 @@
+import { profileSchema } from "@api/modules/profiles/schemas";
 import { t } from "elysia";
-import { profileSchema } from "../profiles/schemas";
 
 export const discoveryQuerySchema = t.Object({
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 50, default: 20 })),
