@@ -8,21 +8,119 @@ datasource db {
 }
 
 model Specialization {
-  id    String @id
-  label String
+  profiles Profile[]
+  id       String    @id
+  label    String
 }
 
 model Skill {
-  id    String @id
-  label String
+  profiles ProfileSkill[]
+  id       String         @id
+  label    String
 }
 
 model ExperienceLevel {
-  id    String @id
-  label String
+  profiles Profile[]
+  id       String    @id
+  label    String
 }
 
 model Goal {
-  id    String @id
-  label String
+  profiles ProfileGoal[]
+  id       String        @id
+  label    String
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  sessions      Session[]
+  accounts      Account[]
+  profile       Profile?
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @db.Timestamptz(3)
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([identifier])
+}
+
+model Profile {
+  userId           String           @id
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName      String           @default("")
+  bio              String           @default("")
+  specializationId String?
+  specialization   Specialization?  @relation(fields: [specializationId], references: [id])
+  experienceId     String?
+  experience       ExperienceLevel? @relation(fields: [experienceId], references: [id])
+  discoverable     Boolean          @default(false)
+  portfolioLinks   String[]         @default([])
+  skills           ProfileSkill[]
+  goals            ProfileGoal[]
+  createdAt        DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([createdAt, userId])
+}
+
+model ProfileSkill {
+  userId  String
+  skillId String
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id])
+
+  @@id([userId, skillId])
+}
+
+model ProfileGoal {
+  userId  String
+  goalId  String
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  goal    Goal    @relation(fields: [goalId], references: [id])
+
+  @@id([userId, goalId])
 }

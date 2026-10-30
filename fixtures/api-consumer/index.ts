@@ -25,6 +25,27 @@ export async function readHealth() {
   return { status, invalid };
 }
 
+export async function readProfile() {
+  const result = await api.api.v1.me.profile.get();
+  if (result.error) {
+    const code: string = result.error.value.error.code;
+    return code;
+  }
+  const timestamp: string = result.data.createdAt;
+  // @ts-expect-error Product timestamps are serialized strings, never Dates.
+  const date: Date = result.data.createdAt;
+  // @ts-expect-error Public profiles must not include account email.
+  result.data.email;
+  return { timestamp, date };
+}
+
+export type ProfileDataIsTyped = AssertFalse<
+  IsAny<Awaited<ReturnType<typeof api.api.v1.me.profile.get>>["data"]>
+>;
+export type ProfileErrorIsTyped = AssertFalse<
+  IsAny<Awaited<ReturnType<typeof api.api.v1.me.profile.get>>["error"]>
+>;
+
 // @ts-expect-error Health has no mutation route.
 api.health.post;
 // @ts-expect-error Invalid fetch credentials must not be accepted.

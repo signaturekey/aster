@@ -40,6 +40,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-aster-local-only-secret-change-before-any-sharing-123}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-http://localhost:3000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-aster}:${POSTGRES_PASSWORD:-aster_local_password}@db:5432/aster
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"

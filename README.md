@@ -2,8 +2,8 @@
 
 Бэкенд платформы для поиска напарников и формирования команд для IT-проектов.
 Реализация MVP выполняется по `openspec/changes/define-it-matchmaking-mvp/`.
-Сейчас доступны публичный `GET /health` и инфраструктура PostgreSQL/Prisma со словарями.
-Auth и продуктовые endpoints ещё не реализованы. Health не требует БД.
+Сейчас доступны `GET /health`, Better Auth email/password, current-user/profile endpoints
+и словари PostgreSQL/Prisma. Контракты и лимиты — [API.md](API.md). Health не требует БД.
 Frontend, мобильное приложение и deployment не входят в этот change.
 
 ## Стек и установка
@@ -63,7 +63,9 @@ console.log(data.status); // "ok"
 а не runtime dependency. Browser build проверяет, что в bundle есть Eden HTTP,
 но нет Elysia server, API или Prisma runtime. Отдельный consumer fixture проверяет
 inferred request/response/error types, отсутствие `any` и негативные assertions.
-Настройка credentials подготовлена для будущих cookie-сессий; auth/CORS ещё не реализованы.
+Cookie-сессии и trusted-origin credentialed CORS реализованы. Для host dev нужны
+`DATABASE_URL`, `BETTER_AUTH_SECRET` (32+ символа), `BETTER_AUTH_URL` и `TRUSTED_ORIGINS`;
+безопасные local-only примеры в `.env.example`.
 
 ## Команды
 
@@ -113,7 +115,7 @@ Engineering-default seed IDs (`apps/api/prisma/dictionaries.ts`):
 - Experience: beginner, junior, middle, senior, lead.
 - Goals: startup, hackathon, side-project, learning, pair-programming.
 
-API словарей появится на этапе profiles; наличие строк БД не означает готовность endpoint.
+Словари доступны через защищённый `GET /api/v1/dictionaries`.
 
 ## Контейнеры и integration tests
 
