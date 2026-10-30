@@ -31,7 +31,14 @@ export const migrations: MigrationProvider = {
 };
 
 export async function migrateDatabase(db: SqlDatabase, provider = migrations) {
-  const migrator = new Migrator({ db, provider });
+  const current = await sql<{
+    schema: string;
+  }>`select current_schema() as schema`.execute(db);
+  const migrationTableSchema = current.rows[0]?.schema;
+  if (!migrationTableSchema) throw new Error("Database has no current schema");
+  // Metadata discovery must be scoped too: other test schemas can contain
+  // identically named history tables, even when search_path is isolated.
+  const migrator = new Migrator({ db, provider, migrationTableSchema });
   const result = await migrator.migrateToLatest();
   if (result.error)
     throw new Error(
