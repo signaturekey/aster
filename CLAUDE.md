@@ -12,14 +12,14 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## Current state and target architecture
 
-The backend lives in `apps/api`, with the shared client in `packages/api-client`. GitHub Actions and workspace type checks are configured. The standalone consumer fixture was removed at the user’s request. PostgreSQL/Prisma dictionaries, committed migrations, isolated integration infrastructure and Docker/Compose configuration exist. Full local image build/startup is blocked on the Prisma engine download; see `docs/containers.md` (local, Git-ignored) and the task evidence. Better Auth database sessions, profiles/dictionaries, discovery/matches, project teams/applications, durable text conversations and SSE are implemented. See `docs/API.md` (local, Git-ignored) for implemented contracts. Runtime SSE schemas live in browser-safe `packages/contracts`; the API contract remains type-only.
+The backend in `apps/api` uses Kysely + pg with handwritten types and a fresh snake_case SQL baseline. Better Auth, profiles/discovery/matches, projects/teams, messages and SSE are implemented; shared API client/contracts remain browser-safe. Ordinary local Docker build/startup, authenticated HTTP, SSE shutdown and restart persistence were exercised successfully on 2026-10-30. Detailed local docs are Git-ignored under `docs/`; root README stays concise. The former Prisma change remains archived as superseded; its historical failed checks are not rewritten.
 
 Approved implementation direction:
 
 - Bun workspaces: `apps/api` and `packages/api-client`; reserve `apps/web` for later.
 - Modular monolith: one API process and PostgreSQL. Modules: identity, profiles, discovery/matches, projects/teams, conversations.
 - Elysia + its TypeBox schemas for request validation and explicit public responses; Eden Treaty for the client. No duplicate DTO interfaces, Zod layer, or generated OpenAPI SDK.
-- Current implementation still uses Prisma. The user selected Kysely + pg as its replacement; implementation is now approved after grilling. Preserve public contracts and SQL/business invariants. The user explicitly authorized a one-time reset of only this project's local working/test databases, a fresh snake_case baseline and no legacy data/session migration; never reset from normal startup/test commands. Parameterized SQL remains allowed for locks and specialized queries.
+- Use Kysely + pg, handwritten database types and explicit reviewed SQL migrations. Physical names are snake_case with explicit public camelCase projections, no naming plugin or codegen. Product UUID/created_at defaults come from PostgreSQL; mutations explicitly update updated_at without triggers. Preserve no-op timestamps. The approved one-time local reset has been performed; normal startup/tests must never reset the working DB.
 - Better Auth email/password, database-backed sessions, HttpOnly cookies, no cookie cache initially. No OAuth, email verification, SMTP, or password-reset flow in this local MVP.
 - HTTP message writes/history plus authenticated SSE events. Single-instance API; no Socket.IO, Redis, presence, typing indicators, or read receipts.
 - Dockerfile for the API and Docker Compose for the complete local stack, including migration startup. Normal container startup must not require Bun on the host.
@@ -34,9 +34,9 @@ Approved implementation direction:
 - Chain Elysia route/plugin definitions and export the final inferred `App` type without starting a server. Do not widen it to bare `Elysia`.
 - Use extensionless, package-specific aliases such as `@api/*` for backend source instead of deep relative imports or an ambiguous shared `@/*` alias.
 - Keep the shared TypeScript baseline package-agnostic. Define aliases in the owning package's config, not globally. A package that follows another package's source type graph must explicitly map the aliases it encounters: `apps/api` maps `@api/*` to `./src/*`, and `packages/api-client` maps it to `../../apps/api/src/*` because it consumes the inferred API contract. Small explicit duplication is preferable to leaking backend configuration into unrelated packages. Verify alias changes with workspace type checks, Bun tests, and API/browser-client builds.
-- Export `@aster/api/contract` as types only. `@aster/api-client` must not import the API runtime or Prisma into browser bundles.
+- Export `@aster/api/contract` as types only. `@aster/api-client` must not import the API runtime, Kysely or pg into browser bundles.
 - Use per-package TypeScript configs extending a shared baseline after migration. `bun build` does not replace type checking.
-- Never expose Prisma rows directly: select public fields, serialize timestamps to ISO strings, and exclude email/private account data from other users' responses.
+- Never expose database rows directly: select public fields, serialize timestamps to ISO strings, and exclude email/private account data from other users' responses.
 - Enforce permissions using current database state, including chat history, message writes, and SSE delivery after membership revocation.
 - Use constraints and coordinated transactions for matching, recruitment, ownership, and message idempotency. Test races against PostgreSQL; mocks cannot establish these invariants.
 - Keep engineering defaults such as field limits explicit in schemas and tests; do not silently invent new product behavior.
@@ -53,7 +53,7 @@ Do not commit secrets, read unrelated credentials, publish packages/images, buy 
 - After implementation approval, use small coherent commits and push to `https://github.com/signaturekey/aster` to verify GitHub Actions. Do not push during the current documentation review.
 - Follow Conventional Commits: `<type>(<optional-scope>): <description>`, for example `feat(auth): add email sign-in`, `fix(matches): prevent duplicate matches`, or `ci: add backend checks`.
 - Do not add commitlint or commit hooks. Do not amend/reset/rewrite history, force-push, or bypass hooks/signing/checks without explicit approval.
-- Add GitHub Actions early for pushes to `main` and pull requests. Run frozen install, Prisma generation when introduced, ESLint/Prettier, workspace type checks, unit tests, PostgreSQL migration/integration tests, API build, and Docker image build. No image publication or deployment.
+- Add GitHub Actions early for pushes to `main` and pull requests. Run frozen install, ESLint/Prettier, workspace type checks, unit tests, PostgreSQL migration/integration tests, API build, and Docker image build. No image publication or deployment.
 - Hosted CI is only verified when the run for the latest pushed commit succeeds. If GitHub access is unavailable, report the blocker; do not equate local checks with a green Actions run.
 
 ## Verification and completion
@@ -61,7 +61,6 @@ Do not commit secrets, read unrelated credentials, publish packages/images, buy 
 Current root commands (workspace type checks; no standalone consumer fixture):
 
 ```sh
-bun run db:generate
 bun run check
 bun run typecheck
 bun run test:unit

@@ -7,21 +7,22 @@ context: |
   teams, and private text conversations. Backend only; do not create a web app.
   Current implementation: modular backend with implemented product modules,
   Bun workspaces apps/api, packages/api-client and packages/contracts,
-  Elysia/TypeBox public schemas, Eden Treaty and PostgreSQL/Prisma.
-  New planning target: replace Prisma with Kysely + pg and engine-free migrations,
-  preserving existing data, SQL invariants, API contracts and auth sessions,
+  Elysia/TypeBox public schemas, Eden Treaty and PostgreSQL/Kysely + pg.
+  Persistence uses handwritten types, one fresh snake_case SQL baseline and
+  engine-free migrations; public contracts and business invariants are preserved.
   Better Auth email/password with database sessions and HttpOnly cookies.
   No OAuth, SMTP, email verification, or password recovery in this local MVP.
   Full local stack via Dockerfile and Docker Compose; HTTP + SSE, single instance.
   ESLint + typescript-eslint, Prettier, strict TypeScript,
   bun:test unit and PostgreSQL integration tests.
-  CI: frozen install, Prisma generation, lint/types/tests/migrations/API and image
+  CI: frozen install, lint/types/tests/migrations/API and image
   builds on GitHub Actions. No smoke/E2E/browser suites, commitlint, image publishing,
   or deployment. Conventional Commits is an agent rule, not a CI-enforced rule.
   Git target: main at https://github.com/signaturekey/aster, small commits and pushes
   after implementation approval. Actual green Actions is required for completion.
   The MVP change was archived as superseded on 2026-10-30 with 24/25 verified tasks;
-  its local Prisma Docker engine download still fails, so startup was not verified.
+  its historical local Prisma startup never passed; Kysely local startup, HTTP,
+  SSE shutdown and persistent restart have now been verified separately.
   Kysely implementation was explicitly approved after grilling on 2026-10-30,
   including one-time project-only work/test DB reset and small commits/pushes.
   Preserve API behavior; use snake_case SQL baseline, handwritten types, no legacy adoption.
