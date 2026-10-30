@@ -29,7 +29,7 @@ export function productRoutes(
         allowedHeaders: ["Content-Type"],
       }),
     )
-    .onError(({ error, code, status }) => {
+    .onError({ as: "global" }, ({ error, code, status }) => {
       if (error instanceof ProductError)
         return status(error.status, errorBody(error.code, error.message));
       if (code === "VALIDATION" || code === "PARSE")

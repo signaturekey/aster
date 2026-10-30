@@ -1,5 +1,8 @@
 const result = await Bun.build({
-  entrypoints: ["packages/api-client/src/index.ts"],
+  entrypoints: [
+    "packages/api-client/src/index.ts",
+    "packages/api-client/src/events.ts",
+  ],
   outdir: "packages/api-client/dist",
   target: "browser",
   metafile: true,

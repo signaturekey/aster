@@ -1,6 +1,10 @@
 import { Elysia, t } from "elysia";
 import type { Database } from "./db/client";
+import { conversationRoutes } from "./modules/conversations/routes";
+import { createConversationStreams } from "./modules/conversations/streams";
+import { discoveryRoutes } from "./modules/discovery/routes";
 import type { Auth } from "./modules/identity/service";
+import { projectRoutes } from "./modules/projects/routes";
 import { productRoutes } from "./product";
 
 const health = () =>
@@ -15,7 +19,18 @@ const health = () =>
   );
 
 export const app = health();
-export const createApp = (db: Database, auth: Auth, trustedOrigins: string[]) =>
-  health().use(productRoutes(db, auth, trustedOrigins));
+export const createApp = (
+  db: Database,
+  auth: Auth,
+  trustedOrigins: string[],
+  streams = createConversationStreams(db),
+) =>
+  health()
+    .use(productRoutes(db, auth, trustedOrigins))
+    .use(discoveryRoutes(db, auth, trustedOrigins))
+    .use(projectRoutes(db, auth, trustedOrigins))
+    .group("/api/v1", (routes) =>
+      routes.use(conversationRoutes(db, auth, trustedOrigins, streams)),
+    );
 
 export type App = ReturnType<typeof createApp>;

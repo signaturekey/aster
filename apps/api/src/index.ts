@@ -1,5 +1,6 @@
 import { createApp } from "./app";
 import { createDatabase } from "./db/client";
+import { createConversationStreams } from "./modules/conversations/streams";
 import { createAuth } from "./modules/identity/service";
 
 const databaseURL = process.env.DATABASE_URL;
@@ -15,7 +16,8 @@ const trustedOrigins = (process.env.TRUSTED_ORIGINS ?? baseURL)
   .map((value) => new URL(value.trim()).origin);
 const db = createDatabase(databaseURL);
 const auth = createAuth(db, { baseURL, secret, trustedOrigins });
-const app = createApp(db, auth, trustedOrigins);
+const streams = createConversationStreams(db);
+const app = createApp(db, auth, trustedOrigins, streams);
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -29,6 +31,8 @@ app.listen(port, (server) => {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
+    // Close long-lived SSE responses before waiting for the HTTP server to drain.
+    streams.close();
     app
       .stop()
       .then(() => db.$disconnect())

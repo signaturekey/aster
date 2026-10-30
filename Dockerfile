@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY packages/api-client/package.json ./packages/api-client/package.json
+COPY packages/contracts/package.json ./packages/contracts/package.json
 COPY fixtures/api-consumer/package.json ./fixtures/api-consumer/package.json
 
 FROM manifests AS dependencies

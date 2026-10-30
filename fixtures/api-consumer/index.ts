@@ -50,3 +50,37 @@ export type ProfileErrorIsTyped = AssertFalse<
 api.health.post;
 // @ts-expect-error Invalid fetch credentials must not be accepted.
 createApiClient("http://localhost:3000", { fetch: { credentials: "invalid" } });
+
+export async function collaborationExamples() {
+  const deck = await api.api.v1.discovery.get({
+    query: { limit: 20, skillIds: ["typescript"], goalIds: ["startup"] },
+  });
+  if (deck.error) return deck.error.value.error.code;
+  const profile = deck.data.items[0];
+  if (profile)
+    await api.api.v1.discovery
+      .decisions({ targetUserId: profile.userId })
+      .put({ value: "interested" });
+  const projects = await api.api.v1.projects.get({ query: { limit: 20 } });
+  if (projects.error) return projects.error.value.error.code;
+  const project = projects.data.items[0];
+  if (project)
+    await api.api.v1
+      .projects({ projectId: project.id })
+      .applications.post({ text: "I can help" });
+  const conversations = await api.api.v1.conversations.get({
+    query: { limit: 20 },
+  });
+  if (conversations.error) return conversations.error.value.error.code;
+  const conversation = conversations.data.items[0];
+  if (conversation) {
+    const result = await api.api.v1
+      .conversations({ conversationId: conversation.id })
+      .messages.post({ text: "Hello", requestId: "client-request-1" });
+    if (result.error) return result.error.value.error.code;
+    const timestamp: string = result.data.createdAt;
+    // @ts-expect-error Messages must not expose private sender email.
+    result.data.email;
+    return timestamp;
+  }
+}

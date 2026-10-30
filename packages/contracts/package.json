@@ -1,0 +1,15 @@
+{
+  "name": "@aster/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./events": "./src/events.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "0.34.41"
+  }
+}

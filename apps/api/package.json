@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./events": "./src/events.ts",
     "./contract": {
       "types": "./src/contract.ts"
     }
@@ -15,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aster/contracts": "workspace:*",
     "@elysiajs/cors": "1.4.1",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
