@@ -76,13 +76,19 @@ export function publicProfile(row: ProfileRow): PublicProfile {
   };
 }
 
-// At most four SELECTs, independent of roster size. Callers needing a consistent
-// snapshot across selection/hydration supply their existing transaction.
+// At most four SELECTs, independent of roster size. A root read needs one
+// snapshot across scalar/collection hydration; transaction callers retain their
+// existing lock/isolation boundary instead of starting a nested transaction.
 // Missing users are omitted; existing users without profiles get read-only defaults.
 export async function getProfileRows(
   db: SqlConnection,
   ids: readonly string[],
 ): Promise<ProfileRow[]> {
+  if (!db.isTransaction)
+    return db
+      .transaction()
+      .setIsolationLevel("repeatable read")
+      .execute((tx) => getProfileRows(tx, ids));
   const uniqueIds = [...new Set(ids)];
   if (!uniqueIds.length) return [];
   const profiles = await loadProfileScalars(db, uniqueIds);

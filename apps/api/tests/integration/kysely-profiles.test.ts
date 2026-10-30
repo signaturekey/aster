@@ -16,7 +16,12 @@ import {
   profileSchema,
 } from "@api/modules/profiles/schemas";
 import { TypeCompiler } from "elysia/type-system";
-import { sql, type KyselyPlugin, type RootOperationNode } from "kysely";
+import {
+  sql,
+  TableNode,
+  type KyselyPlugin,
+  type RootOperationNode,
+} from "kysely";
 
 const url = process.env.DATABASE_URL;
 if (
@@ -399,4 +404,44 @@ test("Kysely dictionary reads expose only sorted agreed IDs and labels", async (
     for (const value of values)
       expect(Object.keys(value).sort()).toEqual(["id", "label"]);
   }
+});
+
+test("ordinary profile reads keep scalar fields and collections in one committed snapshot", async () => {
+  const user = await createUser();
+  const before = await updateProfile(db, user.id, complete);
+  let changed = false;
+  const scalarQueries = new Set<object>();
+  const observed = db.withPlugin({
+    transformQuery({ node, queryId }) {
+      if (
+        node.kind === "SelectQueryNode" &&
+        node.from?.froms.some(
+          (from) =>
+            TableNode.is(from) && from.table.identifier.name === "profiles",
+        )
+      )
+        scalarQueries.add(queryId);
+      return node;
+    },
+    async transformResult({ result, queryId }) {
+      if (scalarQueries.delete(queryId) && !changed) {
+        changed = true;
+        await updateProfile(db, user.id, {
+          displayName: "After",
+          specializationId: "frontend",
+          skillIds: ["react"],
+          goalIds: ["learning"],
+        });
+      }
+      return result;
+    },
+  });
+  expect(await getProfile(observed, user.id)).toEqual(before);
+  expect(changed).toBe(true);
+  expect(await getProfile(db, user.id)).toMatchObject({
+    displayName: "After",
+    specializationId: "frontend",
+    skillIds: ["react"],
+    goalIds: ["learning"],
+  });
 });
