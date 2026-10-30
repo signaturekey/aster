@@ -1,5 +1,18 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "lib": ["ESNext"], "types": [] },
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": []
+  },
   "include": ["src/**/*.ts"]
 }
