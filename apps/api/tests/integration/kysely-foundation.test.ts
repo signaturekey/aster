@@ -121,3 +121,15 @@ test("a failed migration rolls back DDL and does not record successful history",
   }>`select name from kysely_migration`.execute(db);
   expect(history.rows.map((item) => item.name)).toEqual(["001_initial"]);
 });
+
+test("dictionary seeding is repeatable and creates no demo product data", async () => {
+  const { seedSqlDictionaries } = await import("@api/db/kysely-seed");
+  await seedSqlDictionaries(db);
+  await seedSqlDictionaries(db);
+  expect(await db.selectFrom("goals").select("id").execute()).toHaveLength(5);
+  expect(await db.selectFrom("skills").select("id").execute()).toHaveLength(10);
+  expect(await db.selectFrom("users").select("id").execute()).toEqual([
+    { id: "owner" },
+  ]);
+  expect(await db.selectFrom("messages").select("id").execute()).toEqual([]);
+});

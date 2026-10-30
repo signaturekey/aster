@@ -8,6 +8,15 @@ export const migrations: MigrationProvider = {
     return {
       "001_initial": {
         async up(db) {
+          const tables = await sql<{ name: string }>`
+            select tablename as name from pg_tables
+            where schemaname = current_schema()
+              and tablename not in ('kysely_migration', 'kysely_migration_lock')
+          `.execute(db);
+          if (tables.rows.length)
+            throw new Error(
+              "Fresh baseline requires an empty application schema; reset only the explicitly approved project database",
+            );
           const baseline = await readFile(
             new URL("./migrations/001_initial.sql", import.meta.url),
             "utf8",
