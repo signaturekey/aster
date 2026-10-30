@@ -17,6 +17,7 @@ type Connection = {
 // HTTP history is authoritative; consumers deduplicate notifications by messageId.
 export function createConversationStreams(db: Database) {
   const connections = new Map<string, Connection>();
+  let stopped = false;
 
   async function deliver(
     userId: string,
@@ -63,6 +64,7 @@ export function createConversationStreams(db: Database) {
   }
 
   function connect(userId: string, sessionId: string, signal: AbortSignal) {
+    if (stopped) return new Response(null, { status: 503 });
     connections.get(userId)?.close();
     let controller: ReadableStreamDefaultController<Uint8Array>;
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -131,6 +133,7 @@ export function createConversationStreams(db: Database) {
       );
     },
     close() {
+      stopped = true;
       for (const connection of connections.values()) connection.close();
     },
   };
