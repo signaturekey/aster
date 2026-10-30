@@ -27,81 +27,93 @@ function publicMatch(row: MatchRow) {
   };
 }
 
+// ECMAScript WhiteSpace + LineTerminator, matching String.prototype.trim().
+const trimWhitespace =
+  "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+
 export async function discover(
   db: Database,
   actorId: string,
   query: DiscoveryQuery,
 ) {
-  await requireCompleteProfile(db, actorId, { discovery: true });
-  const cursor = decodeCursor(query.cursor);
-  const limit = query.limit ?? 20;
-  const invalid = () =>
-    new ProductError(
-      422,
-      "INVALID_DICTIONARY_VALUE",
-      "Unsupported discovery filter",
-    );
-  if (
-    query.specializationId &&
-    !(await db.specialization.count({ where: { id: query.specializationId } }))
-  )
-    throw invalid();
-  if (
-    query.experienceId &&
-    !(await db.experienceLevel.count({ where: { id: query.experienceId } }))
-  )
-    throw invalid();
-  if (
-    query.skillIds &&
-    (await db.skill.count({ where: { id: { in: query.skillIds } } })) !==
-      query.skillIds.length
-  )
-    throw invalid();
-  if (
-    query.goalIds &&
-    (await db.goal.count({ where: { id: { in: query.goalIds } } })) !==
-      query.goalIds.length
-  )
-    throw invalid();
-  const candidates = await db.$queryRaw<{ userId: string }[]>(Prisma.sql`
-    SELECT p."userId" FROM "Profile" p
-    WHERE p."userId" <> ${actorId} AND p."discoverable" = true
-      AND p."displayName" ~ '[^[:space:]]' AND p."specializationId" IS NOT NULL
-      AND EXISTS (SELECT 1 FROM "ProfileSkill" s WHERE s."userId" = p."userId")
-      AND EXISTS (SELECT 1 FROM "ProfileGoal" g WHERE g."userId" = p."userId")
-      AND NOT EXISTS (SELECT 1 FROM "DiscoveryDecision" d WHERE d."actorId" = ${actorId} AND d."targetId" = p."userId")
-      AND NOT EXISTS (SELECT 1 FROM "Match" m WHERE (m."lowId" = ${actorId} AND m."highId" = p."userId") OR (m."highId" = ${actorId} AND m."lowId" = p."userId"))
-      ${query.specializationId ? Prisma.sql`AND p."specializationId" = ${query.specializationId}` : Prisma.empty}
-      ${query.experienceId ? Prisma.sql`AND p."experienceId" = ${query.experienceId}` : Prisma.empty}
-      ${
-        query.skillIds?.length
-          ? Prisma.join(
-              query.skillIds.map(
-                (id) =>
-                  Prisma.sql`AND EXISTS (SELECT 1 FROM "ProfileSkill" s WHERE s."userId" = p."userId" AND s."skillId" = ${id})`,
-              ),
-              " ",
-            )
-          : Prisma.empty
-      }
-      ${query.goalIds?.length ? Prisma.sql`AND EXISTS (SELECT 1 FROM "ProfileGoal" g WHERE g."userId" = p."userId" AND g."goalId" IN (${Prisma.join(query.goalIds)}))` : Prisma.empty}
-      ${cursor ? Prisma.sql`AND (p."createdAt", p."userId") < (${cursor.createdAt}, ${cursor.id})` : Prisma.empty}
-    ORDER BY p."createdAt" DESC, p."userId" DESC LIMIT ${limit + 1}
-  `);
-  const rows = await db.profile.findMany({
-    where: { userId: { in: candidates.map((row) => row.userId) } },
-    select: profileSelect,
-    orderBy: [{ createdAt: "desc" }, { userId: "desc" }],
-  });
-  const items = rows.slice(0, limit);
-  const last = items.at(-1);
-  return {
-    items: items.map(publicProfile),
-    nextCursor:
-      rows.length > limit && last
-        ? encodeCursor({ id: last.userId, createdAt: last.createdAt })
-        : null,
-  };
+  // Selection and hydration must observe the same eligibility/filter snapshot.
+  return db.$transaction(
+    async (tx) => {
+      await requireCompleteProfile(tx, actorId, { discovery: true });
+      const cursor = decodeCursor(query.cursor);
+      const limit = query.limit ?? 20;
+      const invalid = () =>
+        new ProductError(
+          422,
+          "INVALID_DICTIONARY_VALUE",
+          "Unsupported discovery filter",
+        );
+      if (
+        query.specializationId &&
+        !(await tx.specialization.count({
+          where: { id: query.specializationId },
+        }))
+      )
+        throw invalid();
+      if (
+        query.experienceId &&
+        !(await tx.experienceLevel.count({ where: { id: query.experienceId } }))
+      )
+        throw invalid();
+      if (
+        query.skillIds &&
+        (await tx.skill.count({ where: { id: { in: query.skillIds } } })) !==
+          query.skillIds.length
+      )
+        throw invalid();
+      if (
+        query.goalIds &&
+        (await tx.goal.count({ where: { id: { in: query.goalIds } } })) !==
+          query.goalIds.length
+      )
+        throw invalid();
+      const candidates = await tx.$queryRaw<{ userId: string }[]>(Prisma.sql`
+        SELECT p."userId" FROM "Profile" p
+        WHERE p."userId" <> ${actorId} AND p."discoverable" = true
+          AND btrim(p."displayName", ${trimWhitespace}) <> '' AND p."specializationId" IS NOT NULL
+          AND EXISTS (SELECT 1 FROM "ProfileSkill" s WHERE s."userId" = p."userId")
+          AND EXISTS (SELECT 1 FROM "ProfileGoal" g WHERE g."userId" = p."userId")
+          AND NOT EXISTS (SELECT 1 FROM "DiscoveryDecision" d WHERE d."actorId" = ${actorId} AND d."targetId" = p."userId")
+          AND NOT EXISTS (SELECT 1 FROM "Match" m WHERE (m."lowId" = ${actorId} AND m."highId" = p."userId") OR (m."highId" = ${actorId} AND m."lowId" = p."userId"))
+          ${query.specializationId ? Prisma.sql`AND p."specializationId" = ${query.specializationId}` : Prisma.empty}
+          ${query.experienceId ? Prisma.sql`AND p."experienceId" = ${query.experienceId}` : Prisma.empty}
+          ${
+            query.skillIds?.length
+              ? Prisma.join(
+                  query.skillIds.map(
+                    (id) =>
+                      Prisma.sql`AND EXISTS (SELECT 1 FROM "ProfileSkill" s WHERE s."userId" = p."userId" AND s."skillId" = ${id})`,
+                  ),
+                  " ",
+                )
+              : Prisma.empty
+          }
+          ${query.goalIds?.length ? Prisma.sql`AND EXISTS (SELECT 1 FROM "ProfileGoal" g WHERE g."userId" = p."userId" AND g."goalId" IN (${Prisma.join(query.goalIds)}))` : Prisma.empty}
+          ${cursor ? Prisma.sql`AND (p."createdAt", p."userId") < (${cursor.createdAt}, ${cursor.id})` : Prisma.empty}
+        ORDER BY p."createdAt" DESC, p."userId" DESC LIMIT ${limit + 1}
+      `);
+      const rows = await tx.profile.findMany({
+        where: { userId: { in: candidates.map((row) => row.userId) } },
+        select: profileSelect,
+        orderBy: [{ createdAt: "desc" }, { userId: "desc" }],
+      });
+      const items = rows.slice(0, limit);
+      const last = items.at(-1);
+      return {
+        items: items.map(publicProfile),
+        nextCursor:
+          rows.length > limit && last
+            ? encodeCursor({ id: last.userId, createdAt: last.createdAt })
+            : null,
+      };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
 }
 
 export async function setDecision(

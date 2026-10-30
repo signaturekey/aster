@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { encodeCursor } from "../../src/lib/pagination";
+import { discover } from "../../src/modules/discovery/service";
 import { db, register, request } from "./helpers";
 
 async function participant(discoverable = true) {
@@ -94,6 +95,110 @@ test("decisions revise before matching, stay private and reject hidden targets",
   ).toBe(404);
   const incomplete = await register();
   expect((await decide(incomplete, a.id)).status).toBe(409);
+});
+
+test("discovery excludes trim-only Unicode names and includes non-trim whitespace", async () => {
+  const viewer = await participant();
+  const target = await participant();
+  const specializationId = `unicode-${crypto.randomUUID()}`;
+  await db.specialization.create({
+    data: { id: specializationId, label: "Unicode completeness test" },
+  });
+  await db.profile.update({
+    where: { userId: target.id },
+    data: { specializationId },
+  });
+  // FEFF is trimmed by JavaScript but not PostgreSQL's POSIX space class.
+  // U+0085 has the inverse behavior: JavaScript does not trim it.
+  for (const displayName of [
+    "﻿",
+    "\u0009\u000a\u000b\u000c\u000d                  　﻿",
+    "\u0085",
+    "﻿Dev﻿",
+  ]) {
+    const patched = await request("/api/v1/me/profile", {
+      method: "PATCH",
+      cookie: target.cookie,
+      body: { displayName },
+    });
+    expect(patched.status).toBe(200);
+    const complete = displayName.trim().length > 0;
+    expect((await patched.json()).complete).toBe(complete);
+    const response = await request(
+      `/api/v1/discovery?specializationId=${specializationId}`,
+      { cookie: viewer.cookie },
+    );
+    expect(response.status).toBe(200);
+    const page = await response.json();
+    expect(page.items.map((item: { userId: string }) => item.userId)).toEqual(
+      complete ? [target.id] : [],
+    );
+    if (complete) expect(page.items[0].complete).toBe(true);
+  }
+});
+
+test("discovery hydration retains the eligibility snapshot across a committed profile mutation", async () => {
+  const viewer = await participant();
+  const target = await participant();
+  const specializationId = `snapshot-${crypto.randomUUID()}`;
+  await db.specialization.create({
+    data: { id: specializationId, label: "Discovery snapshot test" },
+  });
+  await db.profile.update({
+    where: { userId: target.id },
+    data: { specializationId },
+  });
+  let hydrationCalls = 0;
+  const observed = db.$extends({
+    query: {
+      profile: {
+        async findMany({ args, query }) {
+          hydrationCalls++;
+          // This commits on a separate connection after candidate selection and
+          // before hydration, deterministically reproducing the READ COMMITTED race.
+          const response = await request("/api/v1/me/profile", {
+            method: "PATCH",
+            cookie: target.cookie,
+            body: {
+              discoverable: false,
+              skillIds: [],
+              specializationId: "backend",
+            },
+          });
+          expect(response.status).toBe(200);
+          expect((await response.json()).discoverable).toBe(false);
+          return query(args);
+        },
+      },
+    },
+  });
+  // Preserve the Database surface while routing transactions through the
+  // extension; Prisma extensions omit $on from their generated client type.
+  const instrumented = new Proxy(db, {
+    get(target, property, receiver) {
+      if (property === "$transaction")
+        return observed.$transaction.bind(observed);
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const page = await discover(instrumented, viewer.id, {
+    specializationId,
+    skillIds: ["typescript", "sql"],
+    goalIds: ["startup"],
+  });
+  expect(hydrationCalls).toBe(1);
+  expect(page.items).toHaveLength(1);
+  expect(page.items[0]).toMatchObject({
+    userId: target.id,
+    discoverable: true,
+    complete: true,
+    specializationId,
+    skillIds: ["sql", "typescript"],
+  });
+  // A later request must see the committed opt-out, not the previous snapshot.
+  expect((await discover(db, viewer.id, { specializationId })).items).toEqual(
+    [],
+  );
 });
 
 test("discovery conjunction, exclusions, timestamp ties and cursor validation", async () => {
