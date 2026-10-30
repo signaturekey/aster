@@ -24,6 +24,7 @@
         "@prisma/client": "7.10.1",
         "better-auth": "1.7.14",
         "elysia": "1.4.30",
+        "kysely": "0.29.7",
         "pg": "8.23.1",
       },
       "devDependencies": {

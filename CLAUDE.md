@@ -19,7 +19,7 @@ Approved implementation direction:
 - Bun workspaces: `apps/api` and `packages/api-client`; reserve `apps/web` for later.
 - Modular monolith: one API process and PostgreSQL. Modules: identity, profiles, discovery/matches, projects/teams, conversations.
 - Elysia + its TypeBox schemas for request validation and explicit public responses; Eden Treaty for the client. No duplicate DTO interfaces, Zod layer, or generated OpenAPI SDK.
-- Current implementation still uses Prisma. The user selected Kysely + pg as its replacement; implementation is now approved after grilling. Preserve existing data, SQL constraints, auth sessions and public contracts; do not reset the working database. Parameterized SQL remains allowed for locks and specialized queries.
+- Current implementation still uses Prisma. The user selected Kysely + pg as its replacement; implementation is now approved after grilling. Preserve public contracts and SQL/business invariants. The user explicitly authorized a one-time reset of only this project's local working/test databases, a fresh snake_case baseline and no legacy data/session migration; never reset from normal startup/test commands. Parameterized SQL remains allowed for locks and specialized queries.
 - Better Auth email/password, database-backed sessions, HttpOnly cookies, no cookie cache initially. No OAuth, email verification, SMTP, or password-reset flow in this local MVP.
 - HTTP message writes/history plus authenticated SSE events. Single-instance API; no Socket.IO, Redis, presence, typing indicators, or read receipts.
 - Dockerfile for the API and Docker Compose for the complete local stack, including migration startup. Normal container startup must not require Bun on the host.
