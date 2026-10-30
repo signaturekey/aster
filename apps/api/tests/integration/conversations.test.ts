@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { isConversationEvent } from "@api/events";
 import { errorBody, ProductError } from "@api/lib/errors";
 import { conversationRoutes } from "@api/modules/conversations/routes";
@@ -11,6 +11,7 @@ import {
   origin,
   register,
 } from "./helpers";
+import { isRecipientSelection, observeQueries } from "./query-observer";
 
 const app = new Elysia({ normalize: false })
   .onError(({ error, code, status }) => {
@@ -21,8 +22,6 @@ const app = new Elysia({ normalize: false })
     return status(500, errorBody("INTERNAL_ERROR", "Unexpected error"));
   })
   .group("/api/v1", (app) => app.use(conversationRoutes(db, auth, [origin])));
-
-afterAll(() => db.$disconnect());
 
 async function request(
   path: string,
@@ -46,34 +45,71 @@ async function request(
 
 async function direct(a: string, b: string, createdAt?: Date) {
   const [lowId, highId] = [a, b].sort() as [string, string];
-  return db.$transaction(async (tx) => {
-    const match = await tx.match.create({ data: { lowId, highId } });
-    return tx.conversation.create({
-      data: {
-        matchId: match.id,
-        ...(createdAt ? { createdAt } : {}),
-        members: { create: [{ userId: a }, { userId: b }] },
-      },
-    });
+  return db.transaction().execute(async (tx) => {
+    const match = await tx
+      .insertInto("matches")
+      .values({ low_id: lowId, high_id: highId })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    const conversation = await tx
+      .insertInto("conversations")
+      .values({
+        match_id: match.id,
+        project_id: null,
+        ...(createdAt ? { created_at: createdAt } : {}),
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    await tx
+      .insertInto("conversation_members")
+      .values(
+        [a, b].map((user_id) => ({
+          conversation_id: conversation.id,
+          user_id,
+        })),
+      )
+      .execute();
+    return conversation;
   });
 }
 
 async function project(ownerId: string, memberId: string) {
-  return db.project.create({
-    data: {
-      ownerId,
-      title: "Conversation test",
-      description: "Private discussion",
-      goalId: "startup",
-      requiredRoles: [],
-      members: { create: [{ userId: ownerId }, { userId: memberId }] },
-      conversation: {
-        create: {
-          members: { create: [{ userId: ownerId }, { userId: memberId }] },
-        },
-      },
-    },
-    include: { conversation: true },
+  return db.transaction().execute(async (tx) => {
+    const project = await tx
+      .insertInto("projects")
+      .values({
+        owner_id: ownerId,
+        title: "Conversation test",
+        description: "Private discussion",
+        goal_id: "startup",
+        required_roles: [],
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    await tx
+      .insertInto("project_members")
+      .values(
+        [ownerId, memberId].map((user_id) => ({
+          project_id: project.id,
+          user_id,
+        })),
+      )
+      .execute();
+    const conversation = await tx
+      .insertInto("conversations")
+      .values({ project_id: project.id, match_id: null })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    await tx
+      .insertInto("conversation_members")
+      .values(
+        [ownerId, memberId].map((user_id) => ({
+          conversation_id: conversation.id,
+          user_id,
+        })),
+      )
+      .execute();
+    return { ...project, conversation };
   });
 }
 
@@ -187,13 +223,17 @@ test("message validation, exact content, concurrent request deduplication and co
       .status,
   ).toBe(200);
   expect(
-    await db.message.count({
-      where: {
-        conversationId: conversation.id,
-        senderId: a.id,
-        requestId: "retry",
-      },
-    }),
+    Number(
+      (
+        await db
+          .selectFrom("messages")
+          .select(db.fn.countAll<string>().as("count"))
+          .where("conversation_id", "=", conversation.id)
+          .where("sender_id", "=", a.id)
+          .where("request_id", "=", "retry")
+          .executeTakeFirstOrThrow()
+      ).count,
+    ),
   ).toBe(1);
 });
 
@@ -225,15 +265,17 @@ test("history and conversation cursors traverse descending timestamp ties withou
   if (!conversation) throw new Error("Missing conversation fixture");
   const rows = await Promise.all(
     Array.from({ length: 23 }, (_, index) =>
-      db.message.create({
-        data: {
-          conversationId: conversation.id,
-          senderId: user.id,
+      db
+        .insertInto("messages")
+        .values({
+          conversation_id: conversation.id,
+          sender_id: user.id,
           text: `${index}`,
-          requestId: `${index}`,
-          createdAt: time,
-        },
-      }),
+          request_id: `${index}`,
+          created_at: time,
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow(),
     ),
   );
   const first = await (
@@ -278,8 +320,12 @@ test("SSE delivers only committed messages; retries have no duplicate event and 
     const event = await nextEvent(connection.reader);
     expect(event.messageId).toBe(message.id);
     expect(
-      await db.message.findUnique({ where: { id: event.messageId } }),
-    ).not.toBeNull();
+      await db
+        .selectFrom("messages")
+        .select("id")
+        .where("id", "=", event.messageId)
+        .executeTakeFirst(),
+    ).toBeDefined();
     await send(conversation.id, a.cookie, "live", "live");
     const next = await (
       await send(conversation.id, a.cookie, "next", "next")
@@ -322,48 +368,47 @@ test("publishing selects only connected conversation members before session tran
   const [a, b, other] = await Promise.all([register(), register(), register()]);
   const conversation = await direct(a.id, b.id);
   const committed = await (await send(conversation.id, a.cookie)).json();
-  const sessions = await db.session.findMany({
-    where: { userId: { in: [a.id, b.id, other.id] } },
-  });
+  const sessions = await db
+    .selectFrom("sessions")
+    .select(["id", "user_id as userId"])
+    .where("user_id", "in", [a.id, b.id, other.id])
+    .execute();
   const sessionIds = new Map(sessions.map((row) => [row.userId, row.id]));
   // If an unrelated connection reaches deliver, its expired session closes it.
-  await db.session.updateMany({
-    where: { userId: other.id },
-    data: { expiresAt: new Date(0) },
-  });
+  await db
+    .updateTable("sessions")
+    .set({ expires_at: new Date(0) })
+    .where("user_id", "=", other.id)
+    .execute();
   const sessionLookups: string[] = [];
   let transactions = 0;
   let selections = 0;
-  const observed = db.$extends({
-    query: {
-      conversationMember: {
-        async findMany({ args, query }) {
-          selections++;
-          expect(args.where).toEqual({
-            conversationId: conversation.id,
-            userId: { in: [a.id, b.id, other.id] },
-          });
-          expect(args.select).toEqual({ userId: true });
-          return query(args);
-        },
-      },
-      session: {
-        async findUnique({ args, query }) {
-          if (args.where.id) sessionLookups.push(args.where.id);
-          return query(args);
-        },
-      },
-    },
-  });
-  const instrumented = new Proxy(db, {
-    get(target, property, receiver) {
-      if (property === "conversationMember") return observed.conversationMember;
-      if (property === "$transaction")
-        return (...args: unknown[]) => {
-          transactions++;
-          return Reflect.apply(observed.$transaction, observed, args);
-        };
-      return Reflect.get(target, property, receiver);
+  const instrumented = observeQueries(db, {
+    before(query) {
+      if (isRecipientSelection(query)) {
+        selections++;
+        expect(query.sql).toBe(
+          'select "user_id" as "userId" from "conversation_members" where "conversation_id" = $1 and "user_id" in ($2, $3, $4)',
+        );
+        expect(query.parameters).toEqual([
+          conversation.id,
+          a.id,
+          b.id,
+          other.id,
+        ]);
+      }
+      if (query.sql === "begin") transactions++;
+      // Count the session read, not its separate FOR SHARE coordination lock.
+      if (
+        query.sql.startsWith(
+          'select "user_id" as "userId", "expires_at" as "expiresAt" from "sessions"',
+        )
+      ) {
+        const sessionId = query.parameters[0];
+        if (typeof sessionId !== "string")
+          throw new Error("Missing session query ID");
+        sessionLookups.push(sessionId);
+      }
     },
   });
   const streams = createConversationStreams(instrumented);
@@ -416,19 +461,11 @@ test("publishing selects only connected conversation members before session tran
 test("recipient lookup failure does not fail a committed HTTP send or close streams", async () => {
   const [a, b, other] = await Promise.all([register(), register(), register()]);
   const conversation = await direct(a.id, b.id);
-  const observed = db.$extends({
-    query: {
-      conversationMember: {
-        async findMany() {
-          throw new Error("Recipient lookup unavailable");
-        },
-      },
-    },
-  });
-  const instrumented = new Proxy(db, {
-    get(target, property, receiver) {
-      if (property === "conversationMember") return observed.conversationMember;
-      return Reflect.get(target, property, receiver);
+  const instrumented = observeQueries(db, {
+    before(query) {
+      if (isRecipientSelection(query)) {
+        throw new Error("Recipient lookup unavailable");
+      }
     },
   });
   const streams = createConversationStreams(instrumented);
@@ -438,9 +475,11 @@ test("recipient lookup failure does not fail a committed HTTP send or close stre
   const abort = new AbortController();
   const reads = await Promise.all(
     [b, other].map(async (user) => {
-      const session = await db.session.findFirstOrThrow({
-        where: { userId: user.id },
-      });
+      const session = await db
+        .selectFrom("sessions")
+        .select("id")
+        .where("user_id", "=", user.id)
+        .executeTakeFirstOrThrow();
       const response = streams.connect(user.id, session.id, abort.signal);
       const reader = response.body?.getReader();
       if (!reader) throw new Error("Missing SSE body");
@@ -471,8 +510,12 @@ test("recipient lookup failure does not fail a committed HTTP send or close stre
     expect(response.status).toBe(200);
     const message = await response.json();
     expect(
-      await db.message.findUnique({ where: { id: message.id } }),
-    ).not.toBeNull();
+      await db
+        .selectFrom("messages")
+        .select("id")
+        .where("id", "=", message.id)
+        .executeTakeFirst(),
+    ).toBeDefined();
     for (const { state } of reads) expect(state.settled).toBe(false);
   } finally {
     abort.abort();
@@ -499,18 +542,25 @@ test("project revoke serializes racing reads/writes, filters live delivery, and 
   const acquired = new Promise<void>((resolve) => {
     locked = resolve;
   });
-  const revoke = db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${p.id} FOR UPDATE`;
+  const revoke = db.transaction().execute(async (tx) => {
+    await tx
+      .selectFrom("projects")
+      .select("id")
+      .where("id", "=", p.id)
+      .forUpdate()
+      .execute();
     locked();
     await gate;
-    await tx.conversationMember.delete({
-      where: {
-        conversationId_userId: { conversationId: id, userId: member.id },
-      },
-    });
-    await tx.projectMember.delete({
-      where: { projectId_userId: { projectId: p.id, userId: member.id } },
-    });
+    await tx
+      .deleteFrom("conversation_members")
+      .where("conversation_id", "=", id)
+      .where("user_id", "=", member.id)
+      .execute();
+    await tx
+      .deleteFrom("project_members")
+      .where("project_id", "=", p.id)
+      .where("user_id", "=", member.id)
+      .execute();
   });
   try {
     await acquired;
@@ -527,14 +577,21 @@ test("project revoke serializes racing reads/writes, filters live delivery, and 
     expect((await nextEvent(connection.reader)).messageId).toBe(permitted.id);
     const list = await (await request("/conversations", member.cookie)).json();
     expect(list.items.map((row: { id: string }) => row.id)).not.toContain(id);
-    await db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${p.id} FOR UPDATE`;
-      await tx.projectMember.create({
-        data: { projectId: p.id, userId: member.id },
-      });
-      await tx.conversationMember.create({
-        data: { conversationId: id, userId: member.id },
-      });
+    await db.transaction().execute(async (tx) => {
+      await tx
+        .selectFrom("projects")
+        .select("id")
+        .where("id", "=", p.id)
+        .forUpdate()
+        .execute();
+      await tx
+        .insertInto("project_members")
+        .values({ project_id: p.id, user_id: member.id })
+        .execute();
+      await tx
+        .insertInto("conversation_members")
+        .values({ conversation_id: id, user_id: member.id })
+        .execute();
     });
     const restored = await (await request(messages(id), member.cookie)).json();
     expect(restored.items.map((row: { id: string }) => row.id)).toContain(
@@ -554,25 +611,15 @@ test("an in-flight event delivery rechecks membership after waiting for a racing
   const conversationId = p.conversation.id;
   const directChat = await direct(owner.id, member.id);
   const committed = await (await send(conversationId, owner.cookie)).json();
-  const session = await db.session.findFirstOrThrow({
-    where: { userId: member.id },
-  });
+  const session = await db
+    .selectFrom("sessions")
+    .select("id")
+    .where("user_id", "=", member.id)
+    .executeTakeFirstOrThrow();
   const selected = Promise.withResolvers<void>();
-  const observed = db.$extends({
-    query: {
-      conversationMember: {
-        async findMany({ args, query }) {
-          const members = await query(args);
-          selected.resolve();
-          return members;
-        },
-      },
-    },
-  });
-  const instrumented = new Proxy(db, {
-    get(target, property, receiver) {
-      if (property === "conversationMember") return observed.conversationMember;
-      return Reflect.get(target, property, receiver);
+  const instrumented = observeQueries(db, {
+    after(query) {
+      if (isRecipientSelection(query)) selected.resolve();
     },
   });
   const streams = createConversationStreams(instrumented);
@@ -589,16 +636,25 @@ test("an in-flight event delivery rechecks membership after waiting for a racing
   const acquired = new Promise<void>((resolve) => {
     locked = resolve;
   });
-  const revoke = db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${p.id} FOR UPDATE`;
+  const revoke = db.transaction().execute(async (tx) => {
+    await tx
+      .selectFrom("projects")
+      .select("id")
+      .where("id", "=", p.id)
+      .forUpdate()
+      .execute();
     locked();
     await gate;
-    await tx.conversationMember.delete({
-      where: { conversationId_userId: { conversationId, userId: member.id } },
-    });
-    await tx.projectMember.delete({
-      where: { projectId_userId: { projectId: p.id, userId: member.id } },
-    });
+    await tx
+      .deleteFrom("conversation_members")
+      .where("conversation_id", "=", conversationId)
+      .where("user_id", "=", member.id)
+      .execute();
+    await tx
+      .deleteFrom("project_members")
+      .where("project_id", "=", p.id)
+      .where("user_id", "=", member.id)
+      .execute();
   });
   try {
     await acquired;
@@ -634,10 +690,11 @@ test("live delivery closes expired and signed-out sessions; replacement and canc
   const first = await stream(b.cookie);
   const second = await stream(b.cookie);
   expect((await first.reader.read()).done).toBe(true);
-  await db.session.updateMany({
-    where: { userId: b.id },
-    data: { expiresAt: new Date(0) },
-  });
+  await db
+    .updateTable("sessions")
+    .set({ expires_at: new Date(0) })
+    .where("user_id", "=", b.id)
+    .execute();
   await send(conversation.id, a.cookie);
   expect((await second.reader.read()).done).toBe(true);
   const c = await register();
@@ -677,9 +734,11 @@ test("slow SSE consumers are disconnected at the bounded queue instead of retain
 
 test("shutdown seals the stream registry against requests still authenticating", async () => {
   const user = await register();
-  const session = await db.session.findFirstOrThrow({
-    where: { userId: user.id },
-  });
+  const session = await db
+    .selectFrom("sessions")
+    .select("id")
+    .where("user_id", "=", user.id)
+    .executeTakeFirstOrThrow();
   const streams = createConversationStreams(db);
   const first = streams.connect(
     user.id,

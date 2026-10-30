@@ -1,3 +1,4 @@
+import { afterAll } from "bun:test";
 import { createApp } from "@api/app";
 import { createDatabase } from "@api/db/client";
 import { createAuth } from "@api/modules/identity/service";
@@ -10,6 +11,7 @@ if (
   throw new Error("Use bun run test:integration");
 }
 export const db = createDatabase(process.env.DATABASE_URL);
+afterAll(() => db.destroy());
 export const origin = "http://localhost:3000";
 export const auth = createAuth(db, {
   baseURL: origin,

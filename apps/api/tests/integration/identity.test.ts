@@ -1,15 +1,17 @@
-import { afterAll, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { auth, db, origin, register, request } from "./helpers";
-
-afterAll(() => db.$disconnect());
 
 test("email/password registration, cookie sessions, bad credentials and sign-out", async () => {
   const user = await register();
   expect(user.setCookie).toContain("HttpOnly");
   expect(user.setCookie.toLowerCase()).not.toContain("secure");
-  expect(
-    (await request("/api/auth/get-session", { cookie: user.cookie })).status,
-  ).toBe(200);
+  const sessionResponse = await request("/api/auth/get-session", {
+    cookie: user.cookie,
+  });
+  expect(sessionResponse.status).toBe(200);
+  const sessionBody = await sessionResponse.json();
+  expect(sessionBody.user.id).toBe(user.id);
+  expect(sessionBody.session.userId).toBe(user.id);
   const me = await request("/api/v1/me", { cookie: user.cookie });
   expect(me.status).toBe(200);
   expect((await me.json()).email).toBe(user.email);
@@ -23,9 +25,11 @@ test("email/password registration, cookie sessions, bad credentials and sign-out
     body: { email: user.email, password: user.password },
   });
   expect(good.status).toBe(200);
-  const account = await db.account.findFirstOrThrow({
-    where: { userId: user.id },
-  });
+  const account = await db
+    .selectFrom("accounts")
+    .select("password")
+    .where("user_id", "=", user.id)
+    .executeTakeFirstOrThrow();
   expect(account.password).not.toBe(user.password);
   expect(
     (
@@ -67,10 +71,11 @@ test("missing/expired sessions deny access and untrusted origins cannot mutate",
   expect((await request("/api/v1/me", { cookie: user.cookie })).status).toBe(
     200,
   );
-  await db.session.updateMany({
-    where: { userId: user.id },
-    data: { expiresAt: new Date(0) },
-  });
+  await db
+    .updateTable("sessions")
+    .set({ expires_at: new Date(0) })
+    .where("user_id", "=", user.id)
+    .execute();
   expect((await request("/api/v1/me", { cookie: user.cookie })).status).toBe(
     401,
   );
@@ -83,21 +88,26 @@ test.each(["/api/v1/me", "/api/v1/events"])(
     const { expiresIn, updateAge } = (await auth.$context).sessionConfig;
     const agedAt = new Date(Date.now() - (updateAge + 60) * 1000);
     const oldExpiry = new Date(agedAt.getTime() + expiresIn * 1000);
-    const session = await db.session.findFirstOrThrow({
-      where: { userId: user.id },
-    });
-    await db.session.update({
-      where: { id: session.id },
-      data: { updatedAt: agedAt, expiresAt: oldExpiry },
-    });
+    const session = await db
+      .selectFrom("sessions")
+      .select("id")
+      .where("user_id", "=", user.id)
+      .executeTakeFirstOrThrow();
+    await db
+      .updateTable("sessions")
+      .set({ updated_at: agedAt, expires_at: oldExpiry })
+      .where("id", "=", session.id)
+      .execute();
     const response = await request(path, { cookie: user.cookie });
     try {
       expect(response.status).toBe(200);
-      const renewed = await db.session.findUniqueOrThrow({
-        where: { id: session.id },
-      });
-      expect(renewed.expiresAt.getTime()).toBeGreaterThan(oldExpiry.getTime());
-      expect(renewed.updatedAt.getTime()).toBeGreaterThan(agedAt.getTime());
+      const renewed = await db
+        .selectFrom("sessions")
+        .select(["expires_at", "updated_at"])
+        .where("id", "=", session.id)
+        .executeTakeFirstOrThrow();
+      expect(renewed.expires_at.getTime()).toBeGreaterThan(oldExpiry.getTime());
+      expect(renewed.updated_at.getTime()).toBeGreaterThan(agedAt.getTime());
       const setCookie = response.headers
         .getSetCookie()
         .find((cookie) => cookie.startsWith("better-auth.session_token="));

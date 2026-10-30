@@ -1,11 +1,10 @@
-import { afterAll, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   requireCompleteProfile,
   updateProfile,
 } from "@api/modules/profiles/service";
 import { db, register, request } from "./helpers";
 
-afterAll(() => db.$disconnect());
 const complete = {
   displayName: "Engineer",
   specializationId: "backend",
@@ -18,10 +17,11 @@ const complete = {
 test("profile defaults, completeness, opt-out and known-ID privacy", async () => {
   const user = await register();
   const other = await register();
-  const account = await db.user.findUniqueOrThrow({
-    where: { id: user.id },
-    select: { id: true, createdAt: true },
-  });
+  const account = await db
+    .selectFrom("users")
+    .select(["id", "created_at as createdAt"])
+    .where("id", "=", user.id)
+    .executeTakeFirstOrThrow();
   const initialResponse = await request("/api/v1/me/profile", {
     cookie: user.cookie,
   });
@@ -40,16 +40,24 @@ test("profile defaults, completeness, opt-out and known-ID privacy", async () =>
     updatedAt: account.createdAt.toISOString(),
   });
   expect(
-    await db.profile.findUnique({ where: { userId: user.id } }),
-  ).toBeNull();
+    await db
+      .selectFrom("profiles")
+      .select("user_id")
+      .where("user_id", "=", user.id)
+      .executeTakeFirst(),
+  ).toBeUndefined();
   const defaultKnown = await request(`/api/v1/profiles/${user.id}`, {
     cookie: other.cookie,
   });
   expect(defaultKnown.status).toBe(200);
   expect(await defaultKnown.json()).toEqual(initial);
   expect(
-    await db.profile.findUnique({ where: { userId: user.id } }),
-  ).toBeNull();
+    await db
+      .selectFrom("profiles")
+      .select("user_id")
+      .where("user_id", "=", user.id)
+      .executeTakeFirst(),
+  ).toBeUndefined();
   expect(initial.discoverable).toBe(false);
   expect(initial.complete).toBe(false);
   expect(initial.missingFields).toHaveLength(4);
@@ -59,8 +67,12 @@ test("profile defaults, completeness, opt-out and known-ID privacy", async () =>
     code: "PROFILE_INCOMPLETE",
   });
   expect(
-    await db.profile.findUnique({ where: { userId: user.id } }),
-  ).toBeNull();
+    await db
+      .selectFrom("profiles")
+      .select("user_id")
+      .where("user_id", "=", user.id)
+      .executeTakeFirst(),
+  ).toBeUndefined();
   const patched = await request("/api/v1/me/profile", {
     method: "PATCH",
     cookie: user.cookie,
@@ -69,7 +81,13 @@ test("profile defaults, completeness, opt-out and known-ID privacy", async () =>
   expect(patched.status).toBe(200);
   const profile = await patched.json();
   expect(profile.complete).toBe(true);
-  expect(await db.profile.count({ where: { userId: user.id } })).toBe(1);
+  expect(
+    await db
+      .selectFrom("profiles")
+      .select("user_id")
+      .where("user_id", "=", user.id)
+      .execute(),
+  ).toHaveLength(1);
   expect(profile.createdAt).toBe(new Date(profile.createdAt).toISOString());
   expect(profile.updatedAt).toBe(new Date(profile.updatedAt).toISOString());
   expect(
@@ -115,23 +133,21 @@ test("first PATCH initializes atomically and concurrent PATCHes preserve fields"
   });
   expect(invalid.status).toBe(422);
   expect(
-    await db.profile.findUnique({ where: { userId: user.id } }),
-  ).toBeNull();
+    await db
+      .selectFrom("profiles")
+      .select("user_id")
+      .where("user_id", "=", user.id)
+      .executeTakeFirst(),
+  ).toBeUndefined();
 
-  const observed = db.$extends({
-    query: {
-      profile: {
-        update() {
-          throw new Error("Injected profile update failure");
-        },
-      },
+  const instrumented = db.withPlugin({
+    transformQuery({ node }) {
+      if (node.kind === "UpdateQueryNode")
+        throw new Error("Injected profile update failure");
+      return node;
     },
-  });
-  const instrumented = new Proxy(db, {
-    get(target, property, receiver) {
-      if (property === "$transaction")
-        return observed.$transaction.bind(observed);
-      return Reflect.get(target, property, receiver);
+    async transformResult({ result }) {
+      return result;
     },
   });
   // Bun types this async matcher as void; it still needs to be awaited.
@@ -140,8 +156,12 @@ test("first PATCH initializes atomically and concurrent PATCHes preserve fields"
     "Injected profile update failure",
   );
   expect(
-    await db.profile.findUnique({ where: { userId: user.id } }),
-  ).toBeNull();
+    await db
+      .selectFrom("profiles")
+      .select("user_id")
+      .where("user_id", "=", user.id)
+      .executeTakeFirst(),
+  ).toBeUndefined();
 
   const responses = await Promise.all(
     [complete, { bio: "Concurrent biography" }].map((body) =>
@@ -153,7 +173,13 @@ test("first PATCH initializes atomically and concurrent PATCHes preserve fields"
     ),
   );
   expect(responses.map((response) => response.status)).toEqual([200, 200]);
-  expect(await db.profile.count({ where: { userId: user.id } })).toBe(1);
+  expect(
+    await db
+      .selectFrom("profiles")
+      .select("user_id")
+      .where("user_id", "=", user.id)
+      .execute(),
+  ).toHaveLength(1);
   const profile = await (
     await request("/api/v1/me/profile", { cookie: user.cookie })
   ).json();

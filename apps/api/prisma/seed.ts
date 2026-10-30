@@ -8,5 +8,5 @@ try {
   await seedDictionaries(db);
   console.log("Dictionary seed applied");
 } finally {
-  await db.$disconnect();
+  await db.destroy();
 }

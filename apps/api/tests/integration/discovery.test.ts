@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { encodeCursor } from "@api/lib/pagination";
 import { discover } from "@api/modules/discovery/service";
+import { type KyselyPlugin } from "kysely";
 import { db, register, request } from "./helpers";
 
 async function participant(discoverable = true) {
@@ -42,17 +43,26 @@ test("concurrent reciprocal decisions create one match and direct conversation",
     decide(b, a.id),
   ]);
   expect(responses.map((r) => r.status)).toEqual([200, 200, 200, 200]);
-  const pairs = await db.match.findMany({
-    where: {
-      OR: [
-        { lowId: a.id, highId: b.id },
-        { lowId: b.id, highId: a.id },
-      ],
-    },
-    include: { conversation: { include: { members: true } } },
-  });
+  const pairs = await db
+    .selectFrom("matches as m")
+    .leftJoin("conversations as c", "c.match_id", "m.id")
+    .select(["m.id", "c.id as conversationId"])
+    .where((eb) =>
+      eb.or([
+        eb.and([eb("m.low_id", "=", a.id), eb("m.high_id", "=", b.id)]),
+        eb.and([eb("m.low_id", "=", b.id), eb("m.high_id", "=", a.id)]),
+      ]),
+    )
+    .execute();
   expect(pairs).toHaveLength(1);
-  expect(pairs[0]?.conversation?.members).toHaveLength(2);
+  const pair = pairs[0];
+  if (!pair?.conversationId) throw new Error("Missing match conversation");
+  const members = await db
+    .selectFrom("conversation_members")
+    .select("user_id")
+    .where("conversation_id", "=", pair.conversationId)
+    .execute();
+  expect(members.map((row) => row.user_id).sort()).toEqual([a.id, b.id].sort());
   const match = await (await decide(a, b.id)).json();
   expect(match.match.id).toBe(pairs[0]?.id);
   expect((await decide(a, b.id, "skipped")).status).toBe(409);
@@ -80,10 +90,12 @@ test("decisions revise before matching, stay private and reject hidden targets",
   expect((await decide(a, b.id, "skipped")).status).toBe(200);
   expect((await (await decide(a, b.id)).json()).match).toBeNull();
   expect(
-    await db.conversation.count({
-      where: { members: { some: { userId: a.id } } },
-    }),
-  ).toBe(0);
+    await db
+      .selectFrom("conversation_members")
+      .select("conversation_id")
+      .where("user_id", "=", a.id)
+      .execute(),
+  ).toEqual([]);
   await request("/api/v1/me/profile", {
     method: "PATCH",
     cookie: b.cookie,
@@ -101,13 +113,15 @@ test("discovery excludes trim-only Unicode names and includes non-trim whitespac
   const viewer = await participant();
   const target = await participant();
   const specializationId = `unicode-${crypto.randomUUID()}`;
-  await db.specialization.create({
-    data: { id: specializationId, label: "Unicode completeness test" },
-  });
-  await db.profile.update({
-    where: { userId: target.id },
-    data: { specializationId },
-  });
+  await db
+    .insertInto("specializations")
+    .values({ id: specializationId, label: "Unicode completeness test" })
+    .execute();
+  await db
+    .updateTable("profiles")
+    .set({ specialization_id: specializationId })
+    .where("user_id", "=", target.id)
+    .execute();
   // FEFF is trimmed by JavaScript but not PostgreSQL's POSIX space class.
   // U+0085 has the inverse behavior: JavaScript does not trim it.
   for (const displayName of [
@@ -141,46 +155,47 @@ test("discovery hydration retains the eligibility snapshot across a committed pr
   const viewer = await participant();
   const target = await participant();
   const specializationId = `snapshot-${crypto.randomUUID()}`;
-  await db.specialization.create({
-    data: { id: specializationId, label: "Discovery snapshot test" },
-  });
-  await db.profile.update({
-    where: { userId: target.id },
-    data: { specializationId },
-  });
+  await db
+    .insertInto("specializations")
+    .values({ id: specializationId, label: "Discovery snapshot test" })
+    .execute();
+  await db
+    .updateTable("profiles")
+    .set({ specialization_id: specializationId })
+    .where("user_id", "=", target.id)
+    .execute();
   let hydrationCalls = 0;
-  const observed = db.$extends({
-    query: {
-      profile: {
-        async findMany({ args, query }) {
-          hydrationCalls++;
-          // This commits on a separate connection after candidate selection and
-          // before hydration, deterministically reproducing the READ COMMITTED race.
-          const response = await request("/api/v1/me/profile", {
-            method: "PATCH",
-            cookie: target.cookie,
-            body: {
-              discoverable: false,
-              skillIds: [],
-              specializationId: "backend",
-            },
-          });
-          expect(response.status).toBe(200);
-          expect((await response.json()).discoverable).toBe(false);
-          return query(args);
-        },
-      },
+  const selected = new WeakSet<object>();
+  const instrumented = db.withPlugin({
+    transformQuery({ node, queryId }) {
+      if (
+        node.kind === "RawNode" &&
+        node.sqlFragments.join("").includes('SELECT p.user_id AS "userId"')
+      )
+        selected.add(queryId);
+      return node;
     },
-  });
-  // Preserve the Database surface while routing transactions through the
-  // extension; Prisma extensions omit $on from their generated client type.
-  const instrumented = new Proxy(db, {
-    get(target, property, receiver) {
-      if (property === "$transaction")
-        return observed.$transaction.bind(observed);
-      return Reflect.get(target, property, receiver);
+    async transformResult({ queryId, result }) {
+      if (selected.has(queryId)) {
+        hydrationCalls++;
+        expect(result.rows).toHaveLength(1);
+        // Commit on a separate connection after selection and before hydration,
+        // deterministically reproducing the READ COMMITTED race.
+        const response = await request("/api/v1/me/profile", {
+          method: "PATCH",
+          cookie: target.cookie,
+          body: {
+            discoverable: false,
+            skillIds: [],
+            specializationId: "backend",
+          },
+        });
+        expect(response.status).toBe(200);
+        expect((await response.json()).discoverable).toBe(false);
+      }
+      return result;
     },
-  });
+  } satisfies KyselyPlugin);
   const page = await discover(instrumented, viewer.id, {
     specializationId,
     skillIds: ["typescript", "sql"],
@@ -212,24 +227,28 @@ test("discovery conjunction, exclusions, timestamp ties and cursor validation", 
   ]);
   await decide(viewer, decided.id, "skipped");
   const specializationId = `test-${crypto.randomUUID()}`;
-  await db.specialization.create({
-    data: { id: specializationId, label: "Isolated discovery test" },
-  });
-  await db.profile.updateMany({
-    where: { userId: { in: [a.id, b.id, hidden.id, decided.id] } },
-    data: { specializationId },
-  });
+  await db
+    .insertInto("specializations")
+    .values({ id: specializationId, label: "Isolated discovery test" })
+    .execute();
+  await db
+    .updateTable("profiles")
+    .set({ specialization_id: specializationId })
+    .where("user_id", "in", [a.id, b.id, hidden.id, decided.id])
+    .execute();
   const time = new Date("2099-01-01T00:00:00.000Z");
-  await db.profile.updateMany({
-    where: { userId: { in: [a.id, b.id] } },
-    data: { createdAt: time },
-  });
+  await db
+    .updateTable("profiles")
+    .set({ created_at: time })
+    .where("user_id", "in", [a.id, b.id])
+    .execute();
   const filter = `specializationId=${specializationId}&skillIds=typescript&skillIds=sql&goalIds=startup`;
-  const expected = await db.profile.findMany({
-    where: { userId: { in: [a.id, b.id] } },
-    orderBy: { userId: "desc" },
-    select: { userId: true },
-  });
+  const expected = await db
+    .selectFrom("profiles")
+    .select("user_id as userId")
+    .where("user_id", "in", [a.id, b.id])
+    .orderBy("user_id", "desc")
+    .execute();
   const firstResponse = await request(`/api/v1/discovery?limit=1&${filter}`, {
     cookie: viewer.cookie,
   });
@@ -282,9 +301,12 @@ test("same-value pre-match retries survive target opt-out without creating a mat
     const first = await decide(a, b.id, value);
     expect(first.status).toBe(200);
     const original = await first.json();
-    const decision = await db.discoveryDecision.findUniqueOrThrow({
-      where: { actorId_targetId: { actorId: a.id, targetId: b.id } },
-    });
+    const decision = await db
+      .selectFrom("discovery_decisions")
+      .selectAll()
+      .where("actor_id", "=", a.id)
+      .where("target_id", "=", b.id)
+      .executeTakeFirstOrThrow();
     await request("/api/v1/me/profile", {
       method: "PATCH",
       cookie: b.cookie,
@@ -295,20 +317,25 @@ test("same-value pre-match retries survive target opt-out without creating a mat
     expect(await retried.json()).toEqual(original);
     expect(
       (
-        await db.discoveryDecision.findUniqueOrThrow({
-          where: { actorId_targetId: { actorId: a.id, targetId: b.id } },
-        })
-      ).updatedAt,
-    ).toEqual(decision.updatedAt);
+        await db
+          .selectFrom("discovery_decisions")
+          .selectAll()
+          .where("actor_id", "=", a.id)
+          .where("target_id", "=", b.id)
+          .executeTakeFirstOrThrow()
+      ).updated_at,
+    ).toEqual(decision.updated_at);
     expect(
       (await decide(a, b.id, value === "interested" ? "skipped" : "interested"))
         .status,
     ).toBe(404);
     expect(
-      await db.conversation.count({
-        where: { members: { some: { userId: a.id } } },
-      }),
-    ).toBe(0);
+      await db
+        .selectFrom("conversation_members")
+        .select("conversation_id")
+        .where("user_id", "=", a.id)
+        .execute(),
+    ).toEqual([]);
   }
 });
 

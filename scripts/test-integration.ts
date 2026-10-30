@@ -8,7 +8,7 @@ const env = { ...process.env, DATABASE_URL: url, ASTER_INTEGRATION: "1" };
 for (const command of [
   ["bun", "run", "db:migrate"],
   ["bun", "run", "db:seed"],
-  ["bun", "test", "apps/api/tests/integration"],
+  ["bun", "test", "--isolate", "apps/api/tests/integration"],
 ]) {
   const child = Bun.spawn(command, {
     env,

@@ -2,6 +2,7 @@ import type { SqlDatabase, SqlTransaction } from "@api/db/kysely";
 import { ProductError } from "@api/lib/errors";
 import { pageOptions, pageResult, type PageQuery } from "@api/lib/pagination";
 import { sql } from "kysely";
+import { lockProjectRow } from "@api/modules/projects/kysely-coordination";
 
 export async function requireConversationMember(
   tx: SqlTransaction,
@@ -18,12 +19,7 @@ export async function requireConversationMember(
   if (!source) throw notFound();
   if (source.project_id) {
     // Same source row as recruitment, ownership and membership mutations.
-    await tx
-      .selectFrom("projects")
-      .select("id")
-      .where("id", "=", source.project_id)
-      .forUpdate()
-      .execute();
+    if (!(await lockProjectRow(tx, source.project_id))) throw notFound();
   } else {
     await tx
       .selectFrom("conversations")

@@ -35,7 +35,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     streams.close();
     app
       .stop()
-      .then(() => db.$disconnect())
+      .then(() => db.destroy())
       .catch((error: unknown) => {
         console.error(error);
         process.exitCode = 1;

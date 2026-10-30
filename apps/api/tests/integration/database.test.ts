@@ -1,54 +1,54 @@
-import { afterAll, expect, test } from "bun:test";
-import { createDatabase } from "@api/db/client";
+import { expect, test } from "bun:test";
+import { dictionaries } from "@api/db/dictionaries";
 import { seedDictionaries } from "@api/db/seed";
-import { dictionaries } from "../../prisma/dictionaries";
-
-const url = process.env.DATABASE_URL;
-if (
-  process.env.ASTER_INTEGRATION !== "1" ||
-  !url ||
-  new URL(url).pathname !== "/aster_test"
-) {
-  throw new Error(
-    "Run integration tests through bun run test:integration against aster_test",
-  );
-}
-const db = createDatabase(url);
-afterAll(() => db.$disconnect());
+import { db } from "./helpers";
+import { sql } from "kysely";
 
 test("committed migrations run against real PostgreSQL", async () => {
-  const result = await db.$queryRaw<{ database: string; version: string }[]>`
-    SELECT current_database() AS database, version() AS version
-  `;
-  expect(result[0]?.database).toBe("aster_test");
-  expect(result[0]?.version).toContain("PostgreSQL");
+  const result = await sql<{
+    database: string;
+    version: string;
+  }>`select current_database() as database,version() as version`.execute(db);
+  expect(result.rows[0]?.database).toBe("aster_test");
+  expect(result.rows[0]?.version).toContain("PostgreSQL");
 });
 
 test("dictionary seed is idempotent and stable", async () => {
   await seedDictionaries(db);
   await seedDictionaries(db);
   expect(
-    await db.specialization.count({
-      where: {
-        id: { in: dictionaries.specializations.map((item) => item.id) },
-      },
-    }),
-  ).toBe(dictionaries.specializations.length);
-  expect(await db.skill.count()).toBe(dictionaries.skills.length);
-  expect(await db.experienceLevel.count()).toBe(
-    dictionaries.experienceLevels.length,
+    await db
+      .selectFrom("specializations")
+      .select("id")
+      .where(
+        "id",
+        "in",
+        dictionaries.specializations.map((item) => item.id),
+      )
+      .execute(),
+  ).toHaveLength(dictionaries.specializations.length);
+  expect(await db.selectFrom("skills").select("id").execute()).toHaveLength(
+    dictionaries.skills.length,
   );
-  expect(await db.goal.findMany({ orderBy: { id: "asc" } })).toEqual(
-    dictionaries.goals.toSorted((a, b) => a.id.localeCompare(b.id)),
-  );
+  expect(
+    await db.selectFrom("experience_levels").select("id").execute(),
+  ).toHaveLength(dictionaries.experienceLevels.length);
+  expect(
+    await db
+      .selectFrom("goals")
+      .select(["id", "label"])
+      .orderBy("id")
+      .execute(),
+  ).toEqual(dictionaries.goals.toSorted((a, b) => a.id.localeCompare(b.id)));
 });
 
 test("database primary keys reject duplicate dictionary identifiers", async () => {
-  // Bun types this async matcher as void; it still needs to be awaited.
+  // Bun's rejection assertion is asynchronous despite its void declaration.
   // eslint-disable-next-line @typescript-eslint/await-thenable
   await expect(
-    Promise.resolve(
-      db.goal.create({ data: { id: "startup", label: "Duplicate" } }),
-    ),
-  ).rejects.toMatchObject({ code: "P2002" });
+    db
+      .insertInto("goals")
+      .values({ id: "startup", label: "Duplicate" })
+      .execute(),
+  ).rejects.toMatchObject({ code: "23505" });
 });

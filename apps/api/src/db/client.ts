@@ -1,8 +1,6 @@
-import { PrismaClient } from "@api/generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-
-export function createDatabase(url: string) {
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
-}
-
-export type Database = ReturnType<typeof createDatabase>;
+export { createSqlDatabase as createDatabase } from "@api/db/kysely";
+export type {
+  SqlDatabase as Database,
+  SqlConnection as DatabaseConnection,
+  SqlTransaction as DatabaseTransaction,
+} from "@api/db/kysely";

@@ -5,6 +5,15 @@ import type {
 } from "@api/modules/projects/schemas";
 import { listMembers } from "@api/modules/projects/service";
 import { db, register, request } from "./helpers";
+import {
+  AliasNode,
+  BinaryOperationNode,
+  ColumnNode,
+  PrimitiveValueListNode,
+  ReferenceNode,
+  TableNode,
+  type RootOperationNode,
+} from "kysely";
 
 const projectInput = {
   title: "Aster team",
@@ -73,26 +82,66 @@ function transfer(project: PublicProject, owner: User, userId: string) {
 }
 async function conversationId(project: PublicProject) {
   return (
-    await db.conversation.findUniqueOrThrow({
-      where: { projectId: project.id },
-      select: { id: true },
-    })
+    await db
+      .selectFrom("conversations")
+      .select("id")
+      .where("project_id", "=", project.id)
+      .executeTakeFirstOrThrow()
   ).id;
 }
 async function membershipCounts(project: PublicProject, user: User) {
+  const conversation = await conversationId(project);
   return Promise.all([
-    db.projectMember.count({
-      where: { projectId: project.id, userId: user.id },
-    }),
-    db.conversationMember.count({
-      where: { userId: user.id, conversation: { projectId: project.id } },
-    }),
+    db
+      .selectFrom("project_members")
+      .select("user_id")
+      .where("project_id", "=", project.id)
+      .where("user_id", "=", user.id)
+      .execute()
+      .then((rows) => rows.length),
+    db
+      .selectFrom("conversation_members")
+      .select("user_id")
+      .where("conversation_id", "=", conversation)
+      .where("user_id", "=", user.id)
+      .execute()
+      .then((rows) => rows.length),
   ]);
+}
+function selects(node: RootOperationNode, table: string) {
+  return (
+    node.kind === "SelectQueryNode" &&
+    node.from?.froms.some(
+      (source) =>
+        TableNode.is(source) && source.table.identifier.name === table,
+    ) === true
+  );
+}
+function selectedIds(node: RootOperationNode): string[] {
+  if (
+    node.kind !== "SelectQueryNode" ||
+    !node.where ||
+    !BinaryOperationNode.is(node.where.where)
+  )
+    throw new Error("Expected bounded hydration predicate");
+  const operand = node.where.where.rightOperand;
+  if (
+    !PrimitiveValueListNode.is(operand) ||
+    !operand.values.every((value): value is string => typeof value === "string")
+  )
+    throw new Error("Expected string ID list");
+  return [...operand.values];
 }
 
 test("project creation is atomic, complete-profile gated and publicly projected", async () => {
   const incomplete = await register();
-  const before = await db.project.count({ where: { ownerId: incomplete.id } });
+  const before = (
+    await db
+      .selectFrom("projects")
+      .select("id")
+      .where("owner_id", "=", incomplete.id)
+      .execute()
+  ).length;
   expect((await request("/api/v1/projects")).status).toBe(401);
   expect(
     (
@@ -103,9 +152,15 @@ test("project creation is atomic, complete-profile gated and publicly projected"
       })
     ).status,
   ).toBe(409);
-  expect(await db.project.count({ where: { ownerId: incomplete.id } })).toBe(
-    before,
-  );
+  expect(
+    (
+      await db
+        .selectFrom("projects")
+        .select("id")
+        .where("owner_id", "=", incomplete.id)
+        .execute()
+    ).length,
+  ).toBe(before);
   const owner = await completeUser();
   const outsider = await register();
   const project = await create(owner);
@@ -115,10 +170,22 @@ test("project creation is atomic, complete-profile gated and publicly projected"
   expect(project.createdAt).toBe(new Date(project.createdAt).toISOString());
   expect(await membershipCounts(project, owner)).toEqual([1, 1]);
   expect(
-    await db.projectMember.count({ where: { projectId: project.id } }),
+    (
+      await db
+        .selectFrom("project_members")
+        .select("user_id")
+        .where("project_id", "=", project.id)
+        .execute()
+    ).length,
   ).toBe(1);
   expect(
-    await db.conversation.count({ where: { projectId: project.id } }),
+    (
+      await db
+        .selectFrom("conversations")
+        .select("id")
+        .where("project_id", "=", project.id)
+        .execute()
+    ).length,
   ).toBe(1);
   const detail = await request(`/api/v1/projects/${project.id}`, {
     cookie: outsider.cookie,
@@ -167,7 +234,17 @@ test("owner edits validate dictionaries/limits atomically and reopening preserve
   ])
     expect((await patch(project, owner, body)).status).toBe(422);
   expect(
-    (await db.project.findUniqueOrThrow({ where: { id: project.id } })).title,
+    (
+      await db
+        .selectFrom("projects")
+        .select([
+          "title",
+          "owner_id as ownerId",
+          "recruitment_open as recruitmentOpen",
+        ])
+        .where("id", "=", project.id)
+        .executeTakeFirstOrThrow()
+    ).title,
   ).toBe(project.title);
   const pending = await apply(project, other);
   expect((await patch(project, owner, { recruitmentOpen: false })).status).toBe(
@@ -175,8 +252,13 @@ test("owner edits validate dictionaries/limits atomically and reopening preserve
   );
   expect((await decide(pending, owner)).status).toBe(409);
   expect(
-    (await db.application.findUniqueOrThrow({ where: { id: pending.id } }))
-      .state,
+    (
+      await db
+        .selectFrom("applications")
+        .select("state")
+        .where("id", "=", pending.id)
+        .executeTakeFirstOrThrow()
+    ).state,
   ).toBe("pending");
   expect(await membershipCounts(project, owner)).toEqual([1, 1]);
   const third = await completeUser();
@@ -290,9 +372,15 @@ test("concurrent duplicate applications and acceptance retries persist one outco
     .find((r) => r.status === 200)
     ?.json()) as PublicApplication;
   expect(
-    await db.application.count({
-      where: { projectId: project.id, userId: applicant.id, state: "pending" },
-    }),
+    (
+      await db
+        .selectFrom("applications")
+        .select("id")
+        .where("project_id", "=", project.id)
+        .where("user_id", "=", applicant.id)
+        .where("state", "=", "pending")
+        .execute()
+    ).length,
   ).toBe(1);
   const decisions = await Promise.all([
     decide(application, owner),
@@ -323,15 +411,21 @@ test("acceptance racing recruitment closure has a valid serial outcome without p
   expect(closed.status).toBe(200);
   expect([200, 409]).toContain(accepted.status);
   const state = (
-    await db.application.findUniqueOrThrow({ where: { id: application.id } })
+    await db
+      .selectFrom("applications")
+      .select("state")
+      .where("id", "=", application.id)
+      .executeTakeFirstOrThrow()
   ).state;
   expect(state).toBe(accepted.status === 200 ? "accepted" : "pending");
   expect(await membershipCounts(project, applicant)).toEqual(
     accepted.status === 200 ? [1, 1] : [0, 0],
   );
-  const persisted = await db.project.findUniqueOrThrow({
-    where: { id: project.id },
-  });
+  const persisted = await db
+    .selectFrom("projects")
+    .select(["owner_id as ownerId", "recruitment_open as recruitmentOpen"])
+    .where("id", "=", project.id)
+    .executeTakeFirstOrThrow();
   expect(persisted.recruitmentOpen).toBe(false);
   if (accepted.status === 409) {
     expect(
@@ -351,9 +445,11 @@ test("competing terminal application decisions serialize and retain a single con
     decide(application, applicant, "withdraw"),
   ]);
   expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
-  const row = await db.application.findUniqueOrThrow({
-    where: { id: application.id },
-  });
+  const row = await db
+    .selectFrom("applications")
+    .select("state")
+    .where("id", "=", application.id)
+    .executeTakeFirstOrThrow();
   expect(["accepted", "withdrawn"]).toContain(row.state);
   expect(await membershipCounts(project, applicant)).toEqual(
     row.state === "accepted" ? [1, 1] : [0, 0],
@@ -386,9 +482,11 @@ test("transfers use committed ownership; old-owner retries cannot restore remove
     transfer(project, owner, b.id),
   ]);
   expect(transfers.map((r) => r.status).sort()).toEqual([200, 403]);
-  const persisted = await db.project.findUniqueOrThrow({
-    where: { id: project.id },
-  });
+  const persisted = await db
+    .selectFrom("projects")
+    .select(["owner_id as ownerId", "recruitment_open as recruitmentOpen"])
+    .where("id", "=", project.id)
+    .executeTakeFirstOrThrow();
   const newOwner = persisted.ownerId === a.id ? a : b;
   const member = persisted.ownerId === a.id ? b : a;
   const accepted = persisted.ownerId === a.id ? applicationB : applicationA;
@@ -453,45 +551,45 @@ test("roster keeps one ownership snapshot when transfer and leave commit between
   expect((await decide(application, owner)).status).toBe(200);
   let ownerRead = false;
   let membershipReads = 0;
-  const observed = db.$extends({
-    query: {
-      project: {
-        async findUnique({ args, query }) {
-          const result = await query(args);
-          ownerRead = true;
-          return result;
-        },
-      },
-      projectMember: {
-        async findMany({ args, query }) {
-          expect(ownerRead).toBe(true);
-          membershipReads++;
-          // Separate committed transactions run after the roster's owner lookup
-          // but before its membership query, not an opportunistic timing race.
-          expect((await transfer(project, owner, successor.id)).status).toBe(
-            200,
-          );
-          expect(
-            (
-              await request(`/api/v1/projects/${project.id}/members/me`, {
-                method: "DELETE",
-                cookie: owner.cookie,
-              })
-            ).status,
-          ).toBe(200);
-          return query(args);
-        },
-      },
+  const ownerQueries = new WeakSet<object>();
+  const ownerSnapshot = Promise.withResolvers<void>();
+  const continueRoster = Promise.withResolvers<void>();
+  const instrumented = db.withPlugin({
+    transformQuery({ node, queryId }) {
+      if (selects(node, "projects")) ownerQueries.add(queryId);
+      if (selects(node, "project_members")) {
+        expect(ownerRead).toBe(true);
+        membershipReads++;
+      }
+      return node;
+    },
+    async transformResult({ result, queryId }) {
+      if (ownerQueries.has(queryId)) {
+        ownerRead = true;
+        ownerSnapshot.resolve();
+        await continueRoster.promise;
+      }
+      return result;
     },
   });
-  const instrumented = new Proxy(db, {
-    get(target, property, receiver) {
-      if (property === "$transaction")
-        return observed.$transaction.bind(observed);
-      return Reflect.get(target, property, receiver);
-    },
-  });
-  const original = await listMembers(instrumented, project.id, {});
+  // PostgreSQL has established the roster snapshot, but membership hydration
+  // cannot proceed until transfer and leave commit on separate connections.
+  const rosterRead = listMembers(instrumented, project.id, {});
+  await ownerSnapshot.promise;
+  try {
+    expect((await transfer(project, owner, successor.id)).status).toBe(200);
+    expect(
+      (
+        await request(`/api/v1/projects/${project.id}/members/me`, {
+          method: "DELETE",
+          cookie: owner.cookie,
+        })
+      ).status,
+    ).toBe(200);
+  } finally {
+    continueRoster.resolve();
+  }
+  const original = await rosterRead;
   expect(membershipReads).toBe(1);
   expect(original.items).toHaveLength(2);
   expect(original.items.find((row) => row.userId === owner.id)?.role).toBe(
@@ -530,59 +628,65 @@ test("concurrent rosters batch read-only defaults for missing profiles", async (
   let synchronizeReads = false;
   let profileReads = 0;
   const bothProfilesRead = Promise.withResolvers<void>();
-  const observed = db.$extends({
-    query: {
-      profile: {
-        async $allOperations({ operation, args, query }) {
-          operations.push(operation);
-          if (operation === "findMany") {
-            const filter = args.where?.userId;
-            if (typeof filter === "object" && Array.isArray(filter.in))
-              hydratedIds.push(filter.in);
-          }
-          const result = await query(args);
-          if (synchronizeReads && operation === "findMany") {
-            profileReads++;
-            if (profileReads === 2) bothProfilesRead.resolve();
-            // Both RepeatableRead snapshots observe the absent profiles before
-            // either proceeds with hydration; no sleeps or timing assumptions.
-            await bothProfilesRead.promise;
-          }
-          return result;
-        },
-      },
-      user: {
-        async $allOperations({ operation, args, query }) {
-          userOperations.push(operation);
-          if (operation === "findMany") {
-            expect(args.select).toEqual({ id: true, createdAt: true });
-            const filter = args.where?.id;
-            if (typeof filter === "object" && Array.isArray(filter.in))
-              defaultUserIds.push(filter.in);
-          }
-          return query(args);
-        },
-      },
+  const profileQueries = new WeakSet<object>();
+  const allQueries: RootOperationNode[] = [];
+  const instrumented = db.withPlugin({
+    transformQuery({ node, queryId }) {
+      allQueries.push(node);
+      if (selects(node, "profiles")) {
+        operations.push("select");
+        hydratedIds.push(selectedIds(node));
+        profileQueries.add(queryId);
+      }
+      if (selects(node, "users")) {
+        userOperations.push("select");
+        defaultUserIds.push(selectedIds(node));
+        if (node.kind !== "SelectQueryNode") throw new Error("Expected SELECT");
+        // The fallback query must project exactly these public fields, never
+        // account names, email, images, sessions or other private columns.
+        expect(
+          node.selections?.map((selection) => {
+            const selected = selection.selection;
+            if (ReferenceNode.is(selected) && ColumnNode.is(selected.column))
+              return selected.column.column.name;
+            if (
+              AliasNode.is(selected) &&
+              ReferenceNode.is(selected.node) &&
+              ColumnNode.is(selected.node.column)
+            )
+              return selected.node.column.column.name;
+            throw new Error("Unexpected public user projection");
+          }),
+        ).toEqual(["id", "created_at"]);
+      }
+      return node;
     },
-  });
-  const instrumented = new Proxy(db, {
-    get(target, property, receiver) {
-      if (property === "$transaction")
-        return observed.$transaction.bind(observed);
-      return Reflect.get(target, property, receiver);
+    async transformResult({ result, queryId }) {
+      if (synchronizeReads && profileQueries.has(queryId)) {
+        profileReads++;
+        if (profileReads === 2) bothProfilesRead.resolve();
+        // Both PostgreSQL snapshots read the absent profiles before either
+        // starts fallback user hydration. No timing sleeps or mocked reads.
+        await bothProfilesRead.promise;
+      }
+      return result;
     },
   });
   const page = await listMembers(instrumented, project.id, { limit: 2 });
   expect(page.items).toHaveLength(2);
   expect(page.nextCursor).toBeString();
-  expect(operations).toEqual(["findMany"]);
+  expect(operations).toEqual(["select"]);
+  expect(allQueries).toHaveLength(5);
+  allQueries.length = 0;
   expect(hydratedIds).toEqual([page.items.map((row) => row.userId)]);
   operations.length = 0;
   const roster = await listMembers(instrumented, project.id, {});
   expect(roster.items).toHaveLength(4);
+  expect(allQueries).toHaveLength(5);
+  allQueries.length = 0;
   // Query count stays constant with roster size; no per-member findUnique,
   // user lookups, or profile writes are needed for normal project members.
-  expect(operations).toEqual(["findMany"]);
+  expect(operations).toEqual(["select"]);
   expect(userOperations).toEqual([]);
   for (const row of roster.items) {
     expect(row.profile.userId).toBe(row.userId);
@@ -593,16 +697,19 @@ test("concurrent rosters batch read-only defaults for missing profiles", async (
     expect(row.profile).not.toHaveProperty("email");
   }
   const missingIds = members.slice(0, 2).map((member) => member.id);
-  await db.profile.deleteMany({ where: { userId: { in: missingIds } } });
-  const users = await db.user.findMany({
-    where: { id: { in: missingIds } },
-    select: { id: true, createdAt: true },
-  });
+  await db.deleteFrom("profiles").where("user_id", "in", missingIds).execute();
+  const users = await db
+    .selectFrom("users")
+    .select(["id", "created_at as createdAt"])
+    .where("id", "in", missingIds)
+    .execute();
   operations.length = 0;
   const legacy = await listMembers(instrumented, project.id, {});
   expect(legacy.items).toHaveLength(4);
-  expect(operations).toEqual(["findMany"]);
-  expect(userOperations).toEqual(["findMany"]);
+  expect(allQueries).toHaveLength(6);
+  allQueries.length = 0;
+  expect(operations).toEqual(["select"]);
+  expect(userOperations).toEqual(["select"]);
   expect(defaultUserIds).toHaveLength(1);
   expect(defaultUserIds[0]?.toSorted()).toEqual(missingIds.toSorted());
   for (const row of legacy.items.filter((row) =>
@@ -639,15 +746,25 @@ test("concurrent rosters batch read-only defaults for missing profiles", async (
     listMembers(instrumented, project.id, {}),
   ]);
   expect(profileReads).toBe(2);
+  expect(allQueries).toHaveLength(12);
+  expect(allQueries.every((node) => node.kind === "SelectQueryNode")).toBe(
+    true,
+  );
   expect(concurrent).toEqual([legacy, legacy]);
-  expect(operations).toEqual(["findMany", "findMany"]);
-  expect(userOperations).toEqual(["findMany", "findMany"]);
+  expect(operations).toEqual(["select", "select"]);
+  expect(userOperations).toEqual(["select", "select"]);
   expect(defaultUserIds.map((ids) => ids.toSorted())).toEqual([
     missingIds.toSorted(),
     missingIds.toSorted(),
   ]);
   expect(
-    await db.profile.count({ where: { userId: { in: missingIds } } }),
+    (
+      await db
+        .selectFrom("profiles")
+        .select("user_id")
+        .where("user_id", "in", missingIds)
+        .execute()
+    ).length,
   ).toBe(0);
 });
 
@@ -660,10 +777,15 @@ test("all project collections validate limits/cursors, traverse timestamp ties a
     create(owner),
   ]);
   const time = new Date("2026-01-01T00:00:00.000Z");
-  await db.project.updateMany({
-    where: { id: { in: projects.map((p) => p.id) } },
-    data: { createdAt: time },
-  });
+  await db
+    .updateTable("projects")
+    .set({ created_at: time })
+    .where(
+      "id",
+      "in",
+      projects.map((p) => p.id),
+    )
+    .execute();
   const expected = projects
     .map((p) => p.id)
     .sort()
@@ -686,10 +808,11 @@ test("all project collections validate limits/cursors, traverse timestamp ties a
   const first = await apply(project, applicant);
   await decide(first, applicant, "withdraw");
   const second = await apply(project, applicant);
-  await db.application.updateMany({
-    where: { id: { in: [first.id, second.id] } },
-    data: { createdAt: time },
-  });
+  await db
+    .updateTable("applications")
+    .set({ created_at: time })
+    .where("id", "in", [first.id, second.id])
+    .execute();
   const pageOne = await request(
     `/api/v1/projects/${project.id}/applications?limit=1`,
     { cookie: owner.cookie },
@@ -790,13 +913,15 @@ test("leave/removal revoke chat history and racing writes; new acceptance restor
   expect(removed.status).toBe(200);
   expect([200, 404]).toContain(racingWrite.status);
   expect(
-    await db.message.count({
-      where: {
-        conversationId: id,
-        senderId: member.id,
-        text: "Racing removal",
-      },
-    }),
+    (
+      await db
+        .selectFrom("messages")
+        .select("id")
+        .where("conversation_id", "=", id)
+        .where("sender_id", "=", member.id)
+        .where("text", "=", "Racing removal")
+        .execute()
+    ).length,
   ).toBe(racingWrite.status === 200 ? 1 : 0);
   expect((await request(messages, { cookie: member.cookie })).status).toBe(404);
   expect((await send(member, "Forbidden after removal")).status).toBe(404);
