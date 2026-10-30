@@ -1,7 +1,12 @@
 import type { Database } from "@api/db/client";
 import { Prisma } from "@api/generated/prisma/client";
 import { ProductError } from "@api/lib/errors";
-import { decodeCursor, encodeCursor } from "@api/lib/pagination";
+import {
+  beforeCursor,
+  type PageQuery,
+  pageOptions,
+  pageResult,
+} from "@api/lib/pagination";
 import type { DiscoveryQuery } from "@api/modules/discovery/schemas";
 import {
   profileSelect,
@@ -40,8 +45,7 @@ export async function discover(
   return db.$transaction(
     async (tx) => {
       await requireCompleteProfile(tx, actorId, { discovery: true });
-      const cursor = decodeCursor(query.cursor);
-      const limit = query.limit ?? 20;
+      const { cursor, limit } = pageOptions(query);
       const invalid = () =>
         new ProductError(
           422,
@@ -102,15 +106,11 @@ export async function discover(
         select: profileSelect,
         orderBy: [{ createdAt: "desc" }, { userId: "desc" }],
       });
-      const items = rows.slice(0, limit);
-      const last = items.at(-1);
-      return {
-        items: items.map(publicProfile),
-        nextCursor:
-          rows.length > limit && last
-            ? encodeCursor({ id: last.userId, createdAt: last.createdAt })
-            : null,
-      };
+      const page = pageResult(rows, limit, (row) => ({
+        id: row.userId,
+        createdAt: row.createdAt,
+      }));
+      return { ...page, items: page.items.map(publicProfile) };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
   );
@@ -146,6 +146,22 @@ export async function setDecision(
       where: { userId: actorId },
       select: profileSelect,
     });
+    const target = await tx.profile.findUnique({
+      where: { userId: targetId },
+      select: profileSelect,
+    });
+    const previous = await tx.discoveryDecision.findUnique({
+      where: { actorId_targetId: { actorId, targetId } },
+      select: { value: true },
+    });
+    const eligible =
+      actor?.discoverable &&
+      publicProfile(actor).complete &&
+      target?.discoverable &&
+      publicProfile(target).complete;
+    // A lost-response retry returns its saved outcome even after participation
+    // changes, but must not create a new match for ineligible participants.
+    if (previous?.value === value && !eligible) return { value, match: null };
     if (!actor || !publicProfile(actor).complete)
       throw new ProductError(
         409,
@@ -158,10 +174,6 @@ export async function setDecision(
         "DISCOVERY_DISABLED",
         "Enable discovery first",
       );
-    const target = await tx.profile.findUnique({
-      where: { userId: targetId },
-      select: profileSelect,
-    });
     if (!target?.discoverable || !publicProfile(target).complete)
       throw new ProductError(
         404,
@@ -206,34 +218,18 @@ export async function getMatch(db: Database, actorId: string, id: string) {
 export async function listMatches(
   db: Database,
   actorId: string,
-  query: { limit?: number; cursor?: string },
+  query: PageQuery,
 ) {
-  const cursor = decodeCursor(query.cursor);
-  const limit = query.limit ?? 20;
+  const { cursor, limit } = pageOptions(query);
   const rows = await db.match.findMany({
     where: {
       OR: [{ lowId: actorId }, { highId: actorId }],
-      ...(cursor
-        ? {
-            AND: [
-              {
-                OR: [
-                  { createdAt: { lt: cursor.createdAt } },
-                  { createdAt: cursor.createdAt, id: { lt: cursor.id } },
-                ],
-              },
-            ],
-          }
-        : {}),
+      AND: [beforeCursor(cursor)],
     },
     select: matchSelect,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
   });
-  const items = rows.slice(0, limit);
-  const last = items.at(-1);
-  return {
-    items: items.map(publicMatch),
-    nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
-  };
+  const page = pageResult(rows, limit, (row) => row);
+  return { ...page, items: page.items.map(publicMatch) };
 }

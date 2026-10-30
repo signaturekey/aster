@@ -318,6 +318,169 @@ test("SSE delivers only committed messages; retries have no duplicate event and 
   }
 });
 
+test("publishing selects only connected conversation members before session transactions", async () => {
+  const [a, b, other] = await Promise.all([register(), register(), register()]);
+  const conversation = await direct(a.id, b.id);
+  const committed = await (await send(conversation.id, a.cookie)).json();
+  const sessions = await db.session.findMany({
+    where: { userId: { in: [a.id, b.id, other.id] } },
+  });
+  const sessionIds = new Map(sessions.map((row) => [row.userId, row.id]));
+  // If an unrelated connection reaches deliver, its expired session closes it.
+  await db.session.updateMany({
+    where: { userId: other.id },
+    data: { expiresAt: new Date(0) },
+  });
+  const sessionLookups: string[] = [];
+  let transactions = 0;
+  let selections = 0;
+  const observed = db.$extends({
+    query: {
+      conversationMember: {
+        async findMany({ args, query }) {
+          selections++;
+          expect(args.where).toEqual({
+            conversationId: conversation.id,
+            userId: { in: [a.id, b.id, other.id] },
+          });
+          expect(args.select).toEqual({ userId: true });
+          return query(args);
+        },
+      },
+      session: {
+        async findUnique({ args, query }) {
+          if (args.where.id) sessionLookups.push(args.where.id);
+          return query(args);
+        },
+      },
+    },
+  });
+  const instrumented = new Proxy(db, {
+    get(target, property, receiver) {
+      if (property === "conversationMember") return observed.conversationMember;
+      if (property === "$transaction")
+        return (...args: unknown[]) => {
+          transactions++;
+          return Reflect.apply(observed.$transaction, observed, args);
+        };
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const streams = createConversationStreams(instrumented);
+  const abort = new AbortController();
+  const readers = await Promise.all(
+    [a, b, other].map(async (user) => {
+      const sessionId = sessionIds.get(user.id);
+      if (!sessionId) throw new Error("Missing session fixture");
+      const response = streams.connect(user.id, sessionId, abort.signal);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Missing SSE body");
+      await reader.read();
+      return reader;
+    }),
+  );
+  const [aReader, bReader, otherReader] = readers;
+  if (!aReader || !bReader || !otherReader)
+    throw new Error("Missing stream fixture");
+  let unrelatedSettled = false;
+  const unrelatedRead = otherReader.read().then((result) => {
+    unrelatedSettled = true;
+    return result;
+  });
+  try {
+    await streams.publish({
+      type: "message.created",
+      conversationId: conversation.id,
+      messageId: committed.id,
+    });
+    expect(selections).toBe(1);
+    expect(transactions).toBe(2);
+    expect(sessionLookups.sort()).toEqual(
+      sessions
+        .filter((session) => session.userId === a.id || session.userId === b.id)
+        .map((session) => session.id)
+        .sort(),
+    );
+    expect((await nextEvent(aReader)).messageId).toBe(committed.id);
+    expect((await nextEvent(bReader)).messageId).toBe(committed.id);
+    // No frame and no close: even an invalid unrelated session stays untouched
+    // until its own heartbeat, rather than being processed for every message.
+    expect(unrelatedSettled).toBe(false);
+  } finally {
+    abort.abort();
+    streams.close();
+  }
+  expect((await unrelatedRead).done).toBe(true);
+});
+
+test("recipient lookup failure does not fail a committed HTTP send or close streams", async () => {
+  const [a, b, other] = await Promise.all([register(), register(), register()]);
+  const conversation = await direct(a.id, b.id);
+  const observed = db.$extends({
+    query: {
+      conversationMember: {
+        async findMany() {
+          throw new Error("Recipient lookup unavailable");
+        },
+      },
+    },
+  });
+  const instrumented = new Proxy(db, {
+    get(target, property, receiver) {
+      if (property === "conversationMember") return observed.conversationMember;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const streams = createConversationStreams(instrumented);
+  const isolatedApp = new Elysia({ normalize: false }).group("/api/v1", (app) =>
+    app.use(conversationRoutes(db, auth, [origin], streams)),
+  );
+  const abort = new AbortController();
+  const reads = await Promise.all(
+    [b, other].map(async (user) => {
+      const session = await db.session.findFirstOrThrow({
+        where: { userId: user.id },
+      });
+      const response = streams.connect(user.id, session.id, abort.signal);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Missing SSE body");
+      await reader.read();
+      const state = { settled: false };
+      const pending = reader.read().then((result) => {
+        state.settled = true;
+        return result;
+      });
+      return { state, pending };
+    }),
+  );
+  try {
+    const response = await isolatedApp.handle(
+      new Request(`${origin}/api/v1${messages(conversation.id)}`, {
+        method: "POST",
+        headers: {
+          origin,
+          cookie: a.cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          text: "persist despite SSE failure",
+          requestId: "lookup-failure",
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    const message = await response.json();
+    expect(
+      await db.message.findUnique({ where: { id: message.id } }),
+    ).not.toBeNull();
+    for (const { state } of reads) expect(state.settled).toBe(false);
+  } finally {
+    abort.abort();
+    streams.close();
+  }
+  for (const { pending } of reads) expect((await pending).done).toBe(true);
+});
+
 test("project revoke serializes racing reads/writes, filters live delivery, and rejoin restores full history", async () => {
   const [owner, member] = await Promise.all([register(), register()]);
   const p = await project(owner.id, member.id);
@@ -394,7 +557,25 @@ test("an in-flight event delivery rechecks membership after waiting for a racing
   const session = await db.session.findFirstOrThrow({
     where: { userId: member.id },
   });
-  const streams = createConversationStreams(db);
+  const selected = Promise.withResolvers<void>();
+  const observed = db.$extends({
+    query: {
+      conversationMember: {
+        async findMany({ args, query }) {
+          const members = await query(args);
+          selected.resolve();
+          return members;
+        },
+      },
+    },
+  });
+  const instrumented = new Proxy(db, {
+    get(target, property, receiver) {
+      if (property === "conversationMember") return observed.conversationMember;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const streams = createConversationStreams(instrumented);
   const abort = new AbortController();
   const response = streams.connect(member.id, session.id, abort.signal);
   if (!response.body) throw new Error("Missing SSE body");
@@ -426,6 +607,9 @@ test("an in-flight event delivery rechecks membership after waiting for a racing
       conversationId,
       messageId: committed.id,
     });
+    // Ensure preselection includes the still-visible member before revocation
+    // commits; only the final locked membership check can suppress this event.
+    await selected.promise;
     unlock();
     await revoke;
     await delivery;

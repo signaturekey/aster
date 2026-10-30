@@ -126,11 +126,28 @@ export function createConversationStreams(db: Database) {
     // Only invoke after the write transaction resolves. Delivery failures cannot
     // turn an already committed send into an HTTP failure or trigger a retry.
     async publish(event: ConversationEvent) {
-      await Promise.all(
-        [...connections].map(([userId, connection]) =>
-          deliver(userId, connection, event),
-        ),
-      );
+      const connectedUserIds = [...connections.keys()];
+      if (connectedUserIds.length === 0) return;
+      try {
+        const members = await db.conversationMember.findMany({
+          where: {
+            conversationId: event.conversationId,
+            userId: { in: connectedUserIds },
+          },
+          select: { userId: true },
+        });
+        await Promise.all(
+          members.map(({ userId }) => {
+            const connection = connections.get(userId);
+            // Selection only narrows recipients: deliver still checks current
+            // session/membership under locks to serialize racing revocations.
+            return connection ? deliver(userId, connection, event) : undefined;
+          }),
+        );
+      } catch {
+        // Recipient lookup is also best-effort after commit. Leave streams alone;
+        // clients recover missed notifications from authoritative HTTP history.
+      }
     },
     close() {
       stopped = true;

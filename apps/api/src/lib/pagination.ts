@@ -25,7 +25,9 @@ export function decodeCursor(value: string | undefined) {
       typeof time !== "string" ||
       typeof id !== "string" ||
       !id.length ||
-      id.length > 128
+      id.length > 128 ||
+      id.includes("\u0000") ||
+      !id.isWellFormed()
     )
       throw new Error();
     const createdAt = new Date(time);
@@ -39,4 +41,38 @@ export function decodeCursor(value: string | undefined) {
   } catch {
     throw new ProductError(422, "INVALID_CURSOR", "Cursor is invalid");
   }
+}
+
+export type PageQuery = (typeof pageQuerySchema)["static"];
+
+export function pageOptions(query: PageQuery) {
+  const limit = query.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50)
+    throw new ProductError(422, "INVALID_LIMIT", "Limit must be from 1 to 50.");
+  return { limit, cursor: decodeCursor(query.cursor) };
+}
+
+export function beforeCursor(cursor: ReturnType<typeof decodeCursor>) {
+  return cursor
+    ? {
+        OR: [
+          { createdAt: { lt: cursor.createdAt } },
+          { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+        ],
+      }
+    : {};
+}
+
+export function pageResult<T>(
+  rows: T[],
+  limit: number,
+  cursorRow: (row: T) => { id: string; createdAt: Date },
+) {
+  const items = rows.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor:
+      rows.length > limit && last ? encodeCursor(cursorRow(last)) : null,
+  };
 }

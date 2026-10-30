@@ -76,6 +76,57 @@ test("missing/expired sessions deny access and untrusted origins cannot mutate",
   );
 });
 
+test.each(["/api/v1/me", "/api/v1/events"])(
+  "renews an aged session in the database and response cookie on %s",
+  async (path) => {
+    const user = await register();
+    const { expiresIn, updateAge } = (await auth.$context).sessionConfig;
+    const agedAt = new Date(Date.now() - (updateAge + 60) * 1000);
+    const oldExpiry = new Date(agedAt.getTime() + expiresIn * 1000);
+    const session = await db.session.findFirstOrThrow({
+      where: { userId: user.id },
+    });
+    await db.session.update({
+      where: { id: session.id },
+      data: { updatedAt: agedAt, expiresAt: oldExpiry },
+    });
+    const response = await request(path, { cookie: user.cookie });
+    try {
+      expect(response.status).toBe(200);
+      const renewed = await db.session.findUniqueOrThrow({
+        where: { id: session.id },
+      });
+      expect(renewed.expiresAt.getTime()).toBeGreaterThan(oldExpiry.getTime());
+      expect(renewed.updatedAt.getTime()).toBeGreaterThan(agedAt.getTime());
+      const setCookie = response.headers
+        .getSetCookie()
+        .find((cookie) => cookie.startsWith("better-auth.session_token="));
+      expect(setCookie).toBeDefined();
+      expect(setCookie).toContain("HttpOnly");
+      expect(setCookie).toContain(`Max-Age=${expiresIn}`);
+      expect(setCookie?.split(";")[0]).toBe(user.cookie);
+      if (path === "/api/v1/events") {
+        expect(response.headers.get("content-type")).toBe("text/event-stream");
+        expect(response.headers.get("cache-control")).toBe(
+          "no-cache, no-transform",
+        );
+        if (!response.body) throw new Error("Expected SSE response stream");
+        const reader = response.body.getReader();
+        try {
+          const frame = await reader.read();
+          expect(new TextDecoder().decode(frame.value)).toBe(": connected\n\n");
+        } finally {
+          reader.releaseLock();
+        }
+      } else {
+        expect((await response.json()).email).toBe(user.email);
+      }
+    } finally {
+      if (!response.body?.locked) await response.body?.cancel();
+    }
+  },
+);
+
 test("no mail/cache/OAuth configured and recovery routes are disabled", async () => {
   expect(auth.options.emailAndPassword?.requireEmailVerification).toBe(false);
   expect("sendResetPassword" in auth.options.emailAndPassword).toBe(false);

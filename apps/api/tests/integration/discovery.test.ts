@@ -275,3 +275,64 @@ test("discovery conjunction, exclusions, timestamp ties and cursor validation", 
       ).items,
     ).toEqual([]);
 });
+
+test("same-value pre-match retries survive target opt-out without creating a match", async () => {
+  for (const value of ["interested", "skipped"]) {
+    const [a, b] = await Promise.all([participant(), participant()]);
+    const first = await decide(a, b.id, value);
+    expect(first.status).toBe(200);
+    const original = await first.json();
+    const decision = await db.discoveryDecision.findUniqueOrThrow({
+      where: { actorId_targetId: { actorId: a.id, targetId: b.id } },
+    });
+    await request("/api/v1/me/profile", {
+      method: "PATCH",
+      cookie: b.cookie,
+      body: { discoverable: false },
+    });
+    const retried = await decide(a, b.id, value);
+    expect(retried.status).toBe(200);
+    expect(await retried.json()).toEqual(original);
+    expect(
+      (
+        await db.discoveryDecision.findUniqueOrThrow({
+          where: { actorId_targetId: { actorId: a.id, targetId: b.id } },
+        })
+      ).updatedAt,
+    ).toEqual(decision.updatedAt);
+    expect(
+      (await decide(a, b.id, value === "interested" ? "skipped" : "interested"))
+        .status,
+    ).toBe(404);
+    expect(
+      await db.conversation.count({
+        where: { members: { some: { userId: a.id } } },
+      }),
+    ).toBe(0);
+  }
+});
+
+test("malformed database cursor IDs return INVALID_CURSOR instead of SQL failure", async () => {
+  const user = await participant();
+  for (const id of ["\u0000", "\ud800"]) {
+    const cursor = encodeCursor({
+      id,
+      createdAt: new Date("2026-10-30T00:00:00.000Z"),
+    });
+    for (const collection of [
+      "discovery",
+      "matches",
+      "projects",
+      "conversations",
+      "me/applications",
+    ]) {
+      const response = await request(`/api/v1/${collection}?cursor=${cursor}`, {
+        cookie: user.cookie,
+      });
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({
+        error: { code: "INVALID_CURSOR", message: "Cursor is invalid" },
+      });
+    }
+  }
+});

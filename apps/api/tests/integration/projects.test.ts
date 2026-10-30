@@ -3,6 +3,7 @@ import type {
   PublicApplication,
   PublicProject,
 } from "@api/modules/projects/schemas";
+import { listMembers } from "@api/modules/projects/service";
 import { db, register, request } from "./helpers";
 
 const projectInput = {
@@ -442,6 +443,150 @@ test("transfers use committed ownership; old-owner retries cannot restore remove
       (m: { role: string }) => m.role === "owner",
     ),
   ).toHaveLength(1);
+});
+
+test("roster keeps one ownership snapshot when transfer and leave commit between reads", async () => {
+  const owner = await completeUser();
+  const successor = await completeUser();
+  const project = await create(owner);
+  const application = await apply(project, successor);
+  expect((await decide(application, owner)).status).toBe(200);
+  let ownerRead = false;
+  let membershipReads = 0;
+  const observed = db.$extends({
+    query: {
+      project: {
+        async findUnique({ args, query }) {
+          const result = await query(args);
+          ownerRead = true;
+          return result;
+        },
+      },
+      projectMember: {
+        async findMany({ args, query }) {
+          expect(ownerRead).toBe(true);
+          membershipReads++;
+          // Separate committed transactions run after the roster's owner lookup
+          // but before its membership query, not an opportunistic timing race.
+          expect((await transfer(project, owner, successor.id)).status).toBe(
+            200,
+          );
+          expect(
+            (
+              await request(`/api/v1/projects/${project.id}/members/me`, {
+                method: "DELETE",
+                cookie: owner.cookie,
+              })
+            ).status,
+          ).toBe(200);
+          return query(args);
+        },
+      },
+    },
+  });
+  const instrumented = new Proxy(db, {
+    get(target, property, receiver) {
+      if (property === "$transaction")
+        return observed.$transaction.bind(observed);
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const original = await listMembers(instrumented, project.id, {});
+  expect(membershipReads).toBe(1);
+  expect(original.items).toHaveLength(2);
+  expect(original.items.find((row) => row.userId === owner.id)?.role).toBe(
+    "owner",
+  );
+  expect(original.items.find((row) => row.userId === successor.id)?.role).toBe(
+    "member",
+  );
+  expect(original.items.filter((row) => row.role === "owner")).toHaveLength(1);
+  const subsequent = await request(`/api/v1/projects/${project.id}/members`, {
+    cookie: successor.cookie,
+  });
+  expect(subsequent.status).toBe(200);
+  expect((await subsequent.json()).items).toMatchObject([
+    { userId: successor.id, role: "owner" },
+  ]);
+  expect(await membershipCounts(project, owner)).toEqual([0, 0]);
+});
+
+test("roster batches public profile hydration and only lazily creates missing profiles", async () => {
+  const owner = await completeUser();
+  const members = await Promise.all([
+    completeUser(),
+    completeUser(),
+    completeUser(),
+  ]);
+  const project = await create(owner);
+  for (const member of members) {
+    const application = await apply(project, member);
+    expect((await decide(application, owner)).status).toBe(200);
+  }
+  const operations: string[] = [];
+  const hydratedIds: string[][] = [];
+  const observed = db.$extends({
+    query: {
+      profile: {
+        async $allOperations({ operation, args, query }) {
+          operations.push(operation);
+          if (operation === "findMany") {
+            const filter = args.where?.userId;
+            if (typeof filter === "object" && Array.isArray(filter.in))
+              hydratedIds.push(filter.in);
+          }
+          return query(args);
+        },
+      },
+    },
+  });
+  const instrumented = new Proxy(db, {
+    get(target, property, receiver) {
+      if (property === "$transaction")
+        return observed.$transaction.bind(observed);
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const page = await listMembers(instrumented, project.id, { limit: 2 });
+  expect(page.items).toHaveLength(2);
+  expect(page.nextCursor).toBeString();
+  expect(operations).toEqual(["findMany"]);
+  expect(hydratedIds).toEqual([page.items.map((row) => row.userId)]);
+  operations.length = 0;
+  const roster = await listMembers(instrumented, project.id, {});
+  expect(roster.items).toHaveLength(4);
+  // Query count stays constant with roster size; no per-member findUnique,
+  // user lookups, or profile writes are needed for normal project members.
+  expect(operations).toEqual(["findMany"]);
+  for (const row of roster.items) {
+    expect(row.profile.userId).toBe(row.userId);
+    expect(row.profile.complete).toBe(true);
+    expect(row.profile.createdAt).toBe(
+      new Date(row.profile.createdAt).toISOString(),
+    );
+    expect(row.profile).not.toHaveProperty("email");
+  }
+  const missingIds = members.slice(0, 2).map((member) => member.id);
+  await db.profile.deleteMany({ where: { userId: { in: missingIds } } });
+  operations.length = 0;
+  const legacy = await listMembers(instrumented, project.id, {});
+  expect(legacy.items).toHaveLength(4);
+  expect(operations).toEqual(["findMany", "createMany", "findMany"]);
+  for (const row of legacy.items.filter((row) =>
+    missingIds.includes(row.userId),
+  )) {
+    expect(row.profile).toMatchObject({
+      userId: row.userId,
+      displayName: "",
+      skillIds: [],
+      goalIds: [],
+      complete: false,
+      discoverable: false,
+    });
+  }
+  expect(
+    await db.profile.count({ where: { userId: { in: missingIds } } }),
+  ).toBe(2);
 });
 
 test("all project collections validate limits/cursors, traverse timestamp ties and reauthorize pages", async () => {

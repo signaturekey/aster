@@ -1,9 +1,10 @@
 import type { Database } from "@api/db/client";
 import type { Prisma } from "@api/generated/prisma/client";
 import { ProductError } from "@api/lib/errors";
-import { decodeCursor, encodeCursor } from "@api/lib/pagination";
+import { beforeCursor, pageOptions, pageResult } from "@api/lib/pagination";
 import {
-  getProfile,
+  profileSelect,
+  publicProfile,
   requireCompleteProfile,
 } from "@api/modules/profiles/service";
 import type {
@@ -66,40 +67,6 @@ export function requireOwner(ownerId: string, actorId: string) {
       "OWNER_REQUIRED",
       "Only the owner may do this.",
     );
-}
-
-export function pageOptions(query: PageQuery) {
-  const limit = query.limit ?? 20;
-  // Also bound direct service callers, not just HTTP validation.
-  if (!Number.isInteger(limit) || limit < 1 || limit > 50)
-    throw new ProductError(422, "INVALID_LIMIT", "Limit must be from 1 to 50.");
-  const cursor = decodeCursor(query.cursor);
-  return { limit, cursor };
-}
-
-export function beforeCursor(cursor: ReturnType<typeof decodeCursor>) {
-  return cursor
-    ? {
-        OR: [
-          { createdAt: { lt: cursor.createdAt } },
-          { createdAt: cursor.createdAt, id: { lt: cursor.id } },
-        ],
-      }
-    : {};
-}
-
-export function pageResult<T>(
-  rows: T[],
-  limit: number,
-  cursorRow: (row: T) => { id: string; createdAt: Date },
-) {
-  const items = rows.slice(0, limit);
-  const last = items.at(-1);
-  return {
-    items,
-    nextCursor:
-      rows.length > limit && last ? encodeCursor(cursorRow(last)) : null,
-  };
 }
 
 async function validateDictionaries(
@@ -219,41 +186,77 @@ export async function listMembers(
   query: PageQuery,
 ) {
   const { limit, cursor } = pageOptions(query);
-  return db.$transaction(async (tx) => {
-    const project = await tx.project.findUnique({
-      where: { id: projectId },
-      select: { ownerId: true },
-    });
-    if (!project) throw projectNotFound();
-    const rows = await tx.projectMember.findMany({
-      where: {
-        projectId,
-        ...(cursor
-          ? {
-              OR: [
-                { createdAt: { lt: cursor.createdAt } },
-                { createdAt: cursor.createdAt, userId: { lt: cursor.id } },
-              ],
-            }
-          : {}),
-      },
-      select: { projectId: true, userId: true, createdAt: true },
-      orderBy: [{ createdAt: "desc" }, { userId: "desc" }],
-      take: limit + 1,
-    });
-    const page = pageResult(rows, limit, (row) => ({
-      id: row.userId,
-      createdAt: row.createdAt,
-    }));
-    const items: PublicMember[] = await Promise.all(
-      page.items.map(async (row) => ({
-        projectId: row.projectId,
-        userId: row.userId,
-        role: row.userId === project.ownerId ? "owner" : "member",
-        createdAt: row.createdAt.toISOString(),
-        profile: await getProfile(tx, row.userId),
-      })),
-    );
-    return { ...page, items };
-  });
+  return db.$transaction(
+    async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+        select: { ownerId: true },
+      });
+      if (!project) throw projectNotFound();
+      const rows = await tx.projectMember.findMany({
+        where: {
+          projectId,
+          ...(cursor
+            ? {
+                OR: [
+                  { createdAt: { lt: cursor.createdAt } },
+                  { createdAt: cursor.createdAt, userId: { lt: cursor.id } },
+                ],
+              }
+            : {}),
+        },
+        select: { projectId: true, userId: true, createdAt: true },
+        orderBy: [{ createdAt: "desc" }, { userId: "desc" }],
+        take: limit + 1,
+      });
+      const page = pageResult(rows, limit, (row) => ({
+        id: row.userId,
+        createdAt: row.createdAt,
+      }));
+      if (!page.items.length) return { ...page, items: [] };
+      const userIds = page.items.map((row) => row.userId);
+      const profiles = new Map(
+        (
+          await tx.profile.findMany({
+            where: { userId: { in: userIds } },
+            select: profileSelect,
+          })
+        ).map((row) => [row.userId, publicProfile(row)]),
+      );
+      const missingIds = userIds.filter((userId) => !profiles.has(userId));
+      if (missingIds.length) {
+        // Preserve lazy profile creation for legacy members without issuing
+        // per-member reads or writes. Normal create/apply flows already have profiles.
+        await tx.profile.createMany({
+          data: missingIds.map((userId) => ({ userId })),
+          skipDuplicates: true,
+        });
+        const created = await tx.profile.findMany({
+          where: { userId: { in: missingIds } },
+          select: profileSelect,
+        });
+        for (const row of created) profiles.set(row.userId, publicProfile(row));
+      }
+      const items: PublicMember[] = page.items.map((row) => {
+        const profile = profiles.get(row.userId);
+        if (!profile)
+          throw new ProductError(
+            404,
+            "PROFILE_NOT_FOUND",
+            "Profile not found.",
+          );
+        return {
+          projectId: row.projectId,
+          userId: row.userId,
+          role: row.userId === project.ownerId ? "owner" : "member",
+          createdAt: row.createdAt.toISOString(),
+          profile,
+        };
+      });
+      return { ...page, items };
+    },
+    // Ownership, membership, and public profiles must describe one roster,
+    // even if ownership transfers and the former owner leaves between reads.
+    { isolationLevel: "RepeatableRead" },
+  );
 }

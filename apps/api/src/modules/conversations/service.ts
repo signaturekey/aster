@@ -1,7 +1,12 @@
 import type { Database } from "@api/db/client";
 import type { Prisma } from "@api/generated/prisma/client";
 import { ProductError } from "@api/lib/errors";
-import { decodeCursor, encodeCursor } from "@api/lib/pagination";
+import {
+  beforeCursor,
+  type PageQuery,
+  pageOptions,
+  pageResult,
+} from "@api/lib/pagination";
 
 export type ConversationTransaction = Prisma.TransactionClient;
 
@@ -43,32 +48,19 @@ const messageSelect = {
   createdAt: true,
 } as const;
 
-function before(cursor: ReturnType<typeof decodeCursor>) {
-  return cursor
-    ? {
-        OR: [
-          { createdAt: { lt: cursor.createdAt } },
-          { createdAt: cursor.createdAt, id: { lt: cursor.id } },
-        ],
-      }
-    : {};
-}
-
 const newestFirst = [{ createdAt: "desc" }, { id: "desc" }] as const;
-type PageQuery = { limit?: number; cursor?: string };
 
 function page<T extends { id: string; createdAt: Date }>(
   rows: T[],
   limit: number,
 ) {
-  const items = rows.slice(0, limit);
-  const last = items.at(-1);
+  const result = pageResult(rows, limit, (row) => row);
   return {
-    items: items.map((row) => ({
+    ...result,
+    items: result.items.map((row) => ({
       ...row,
       createdAt: row.createdAt.toISOString(),
     })),
-    nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
   };
 }
 
@@ -77,10 +69,9 @@ export async function listConversations(
   userId: string,
   query: PageQuery,
 ) {
-  const cursor = decodeCursor(query.cursor);
-  const limit = query.limit ?? 20;
+  const { cursor, limit } = pageOptions(query);
   const rows = await db.conversation.findMany({
-    where: { members: { some: { userId } }, ...before(cursor) },
+    where: { members: { some: { userId } }, ...beforeCursor(cursor) },
     select: { id: true, matchId: true, projectId: true, createdAt: true },
     orderBy: [...newestFirst],
     take: limit + 1,
@@ -94,12 +85,11 @@ export async function getMessages(
   conversationId: string,
   query: PageQuery,
 ) {
-  const cursor = decodeCursor(query.cursor);
-  const limit = query.limit ?? 20;
+  const { cursor, limit } = pageOptions(query);
   return db.$transaction(async (tx) => {
     await requireConversationMember(tx, userId, conversationId);
     const rows = await tx.message.findMany({
-      where: { conversationId, ...before(cursor) },
+      where: { conversationId, ...beforeCursor(cursor) },
       select: messageSelect,
       orderBy: [...newestFirst],
       take: limit + 1,
