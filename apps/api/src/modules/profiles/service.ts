@@ -4,7 +4,7 @@ import { ProductError } from "../../lib/errors";
 import type { ProfilePatch, PublicProfile } from "./schemas";
 
 // Never load User, Account, or Session relations into a public profile read.
-const profileSelect = {
+export const profileSelect = {
   userId: true,
   displayName: true,
   bio: true,
@@ -62,7 +62,10 @@ async function ensureProfile(
   await db.profile.createMany({ data: [{ userId }], skipDuplicates: true });
 }
 
-async function getProfileRow(db: Database, userId: string) {
+async function getProfileRow(
+  db: Database | Prisma.TransactionClient,
+  userId: string,
+) {
   const profile = await db.profile.findUnique({
     where: { userId },
     select: profileSelect,
@@ -76,7 +79,10 @@ async function getProfileRow(db: Database, userId: string) {
   });
 }
 
-export async function getProfile(db: Database, userId: string) {
+export async function getProfile(
+  db: Database | Prisma.TransactionClient,
+  userId: string,
+) {
   // Visibility by known ID is independent of completeness and discovery opt-in.
   return publicProfile(await getProfileRow(db, userId));
 }
@@ -203,7 +209,7 @@ export async function getDictionaries(db: Database) {
 }
 
 export async function requireCompleteProfile(
-  db: Database,
+  db: Database | Prisma.TransactionClient,
   userId: string,
   options: { discovery?: boolean } = {},
 ) {

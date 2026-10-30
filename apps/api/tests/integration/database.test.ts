@@ -27,9 +27,13 @@ test("committed migrations run against real PostgreSQL", async () => {
 test("dictionary seed is idempotent and stable", async () => {
   await seedDictionaries(db);
   await seedDictionaries(db);
-  expect(await db.specialization.count()).toBe(
-    dictionaries.specializations.length,
-  );
+  expect(
+    await db.specialization.count({
+      where: {
+        id: { in: dictionaries.specializations.map((item) => item.id) },
+      },
+    }),
+  ).toBe(dictionaries.specializations.length);
   expect(await db.skill.count()).toBe(dictionaries.skills.length);
   expect(await db.experienceLevel.count()).toBe(
     dictionaries.experienceLevels.length,

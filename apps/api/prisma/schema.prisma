@@ -14,6 +14,7 @@ model Specialization {
 }
 
 model Skill {
+  projects ProjectSkill[]
   profiles ProfileSkill[]
   id       String         @id
   label    String
@@ -26,22 +27,32 @@ model ExperienceLevel {
 }
 
 model Goal {
+  projects Project[]
   profiles ProfileGoal[]
   id       String        @id
   label    String
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
-  sessions      Session[]
-  accounts      Account[]
-  profile       Profile?
+  decisions         DiscoveryDecision[]  @relation("actor")
+  receivedDecisions DiscoveryDecision[]  @relation("target")
+  lowMatches        Match[]              @relation("low")
+  highMatches       Match[]              @relation("high")
+  ownedProjects     Project[]            @relation("owner")
+  projects          ProjectMember[]
+  applications      Application[]
+  conversations     ConversationMember[]
+  messages          Message[]
+  id                String               @id
+  name              String
+  email             String               @unique
+  emailVerified     Boolean              @default(false)
+  image             String?
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @db.Timestamptz(3)
+  sessions          Session[]
+  accounts          Account[]
+  profile           Profile?
 }
 
 model Session {
@@ -123,4 +134,118 @@ model ProfileGoal {
   goal    Goal    @relation(fields: [goalId], references: [id])
 
   @@id([userId, goalId])
+}
+
+model DiscoveryDecision {
+  actorId   String
+  targetId  String
+  actor     User     @relation("actor", fields: [actorId], references: [id], onDelete: Cascade)
+  target    User     @relation("target", fields: [targetId], references: [id], onDelete: Cascade)
+  value     String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@id([actorId, targetId])
+}
+
+model Match {
+  id           String        @id @default(uuid())
+  lowId        String
+  highId       String
+  low          User          @relation("low", fields: [lowId], references: [id])
+  high         User          @relation("high", fields: [highId], references: [id])
+  conversation Conversation?
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+
+  @@unique([lowId, highId])
+}
+
+model Project {
+  id              String          @id @default(uuid())
+  title           String
+  description     String
+  goalId          String
+  goal            Goal            @relation(fields: [goalId], references: [id])
+  requiredRoles   String[]
+  requiredSkills  ProjectSkill[]
+  ownerId         String
+  owner           User            @relation("owner", fields: [ownerId], references: [id])
+  recruitmentOpen Boolean         @default(true)
+  members         ProjectMember[]
+  applications    Application[]
+  conversation    Conversation?
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([createdAt, id])
+}
+
+model ProjectSkill {
+  projectId String
+  skillId   String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  skill     Skill   @relation(fields: [skillId], references: [id])
+
+  @@id([projectId, skillId])
+}
+
+model ProjectMember {
+  projectId String
+  userId    String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([projectId, userId])
+}
+
+model Application {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+  text      String
+  state     String   @default("pending")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId, createdAt, id])
+  @@index([userId, createdAt, id])
+}
+
+model Conversation {
+  id        String               @id @default(uuid())
+  matchId   String?              @unique
+  projectId String?              @unique
+  match     Match?               @relation(fields: [matchId], references: [id])
+  project   Project?             @relation(fields: [projectId], references: [id])
+  members   ConversationMember[]
+  messages  Message[]
+  createdAt DateTime             @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt, id])
+}
+
+model ConversationMember {
+  conversationId String
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@id([conversationId, userId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  senderId       String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id])
+  requestId      String
+  text           String
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@unique([conversationId, senderId, requestId])
+  @@index([conversationId, createdAt, id])
 }
