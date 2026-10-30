@@ -10,7 +10,8 @@ From the repository root:
 
 ```sh
 # Optional: defaults already work without a .env file.
-cp .env.example .env
+# Only if .env does not exist; preserve existing local configuration.
+cp -n .env.example .env
 
 docker compose up --build
 ```
@@ -67,6 +68,10 @@ not the older `/var/lib/postgresql/data` mount convention.
 Compose has local defaults. `API_PORT`, `DB_PORT` and `TEST_DB_PORT` change the
 published host ports (defaults 3000, 55432 and 55433). The API always listens on
 port 3000 inside Compose. `PORT` instead controls optional **host** Bun startup.
+If changing API_PORT, set BETTER_AUTH_URL and TRUSTED_ORIGINS to the corresponding
+external origin as well. BETTER_AUTH_SECRET must be at least 32 characters; the
+safe local example/default is not a deployment secret. The entrypoint closes SSE
+streams before draining HTTP requests and disconnecting Prisma on shutdown.
 
 Compose deliberately constructs its service `DATABASE_URL` with `db:5432` and
 `TEST_DATABASE_URL` with `test-db:5432`. A host `.env` URL using `127.0.0.1:55432`

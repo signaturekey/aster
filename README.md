@@ -2,8 +2,9 @@
 
 Бэкенд платформы для поиска напарников и формирования команд для IT-проектов.
 Реализация MVP выполняется по `openspec/changes/define-it-matchmaking-mvp/`.
-Сейчас доступны `GET /health`, Better Auth email/password, current-user/profile endpoints
-и словари PostgreSQL/Prisma. Контракты и лимиты — [API.md](API.md). Health не требует БД.
+Реализованы accounts/profiles, discovery/matches, проекты/заявки/команды,
+приватные текстовые conversations и authenticated SSE. Контракты и лимиты —
+[API.md](API.md). `GET /health` не требует БД. Это локальный MVP, не public-ready service.
 Frontend, мобильное приложение и deployment не входят в этот change.
 
 ## Стек и установка
@@ -15,6 +16,11 @@ Bun **1.4.4**, Elysia **1.4.30**, Eden **1.4.10**, strict TypeScript и Biome.
 ```sh
 bun install --frozen-lockfile
 bun run db:generate
+cp -n .env.example .env # Не перезаписывает существующие настройки
+# Для host dev сначала запустите БД и примените миграции:
+docker compose up -d --wait db
+bun run db:migrate
+bun run db:seed
 bun run dev
 ```
 
@@ -32,6 +38,7 @@ apps/api/
   src/contract.ts             # Только экспорт типа App
   src/index.ts                # Запуск и остановка сервера
   tests/unit/health.test.ts   # In-process HTTP и Eden
+packages/contracts/          # Browser-safe TypeBox SSE schema/type
 packages/api-client/
   src/index.ts                # Browser-safe Eden client
   tests/client.test.ts        # Передача fetch/credentials
@@ -69,18 +76,18 @@ Cookie-сессии и trusted-origin credentialed CORS реализованы. 
 
 ## Команды
 
-| Команда                          | Назначение                                                 |
-| -------------------------------- | ---------------------------------------------------------- |
-| `bun run dev`                    | API с watch                                                |
-| `bun run start`                  | Собранный API                                              |
-| `bun run check`                  | Biome                                                      |
-| `bun run check:fix`              | Форматирование и автоисправления                           |
-| `bun run typecheck`              | Root scripts, API, client, client tests и consumer fixture |
-| `bun test` / `bun run test:unit` | Unit/in-process тесты без listener и БД                    |
-| `bun run test:watch`             | Watch тестов                                               |
-| `bun run build`                  | API и проверяемая browser-сборка клиента                   |
-| `bun run build:api`              | Bun bundle в `apps/api/dist/`                              |
-| `bun run build:client`           | Browser bundle в `packages/api-client/dist/`               |
+| Команда                | Назначение                                                 |
+| ---------------------- | ---------------------------------------------------------- |
+| `bun run dev`          | API с watch                                                |
+| `bun run start`        | Собранный API                                              |
+| `bun run check`        | Biome                                                      |
+| `bun run check:fix`    | Форматирование и автоисправления                           |
+| `bun run typecheck`    | Root scripts, API, client, client tests и consumer fixture |
+| `bun run test:unit`    | Unit/in-process тесты без listener и БД                    |
+| `bun run test:watch`   | Watch тестов                                               |
+| `bun run build`        | API и проверяемая browser-сборка клиента                   |
+| `bun run build:api`    | Bun bundle в `apps/api/dist/`                              |
+| `bun run build:client` | Browser bundle в `packages/api-client/dist/`               |
 
 `bun build` не заменяет проверку TypeScript. Перед коммитом:
 
@@ -146,4 +153,5 @@ Integration runner требует явный `TEST_DATABASE_URL`, допуска
 Текущее ограничение окружения: полный local Docker build блокируется сетевой
 ошибкой загрузки Prisma schema-engine с `binaries.prisma.sh`. Проверены Compose config,
 dependency stages и PostgreSQL stop/start persistence, но migration/API containers
-ещё не запускались. Image build и полноценный container startup не объявлены успешными.
+ещё не запускались. Docker image build уже успешно выполнен в hosted CI для
+`a256dd5` и `9ba509c`; это не доказательство локального полного startup.

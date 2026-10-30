@@ -12,7 +12,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## Current state and target architecture
 
-Currently only `GET /health` exists in Bun workspaces: `apps/api/src/app.ts`, `apps/api/src/index.ts`, `apps/api/tests/unit/health.test.ts`, and `packages/api-client/src/index.ts`. A separate contract consumer fixture and GitHub Actions workflow are configured. PostgreSQL/Prisma dictionaries, committed migrations, isolated integration infrastructure and Docker/Compose configuration exist. Full local image build/startup is blocked on the Prisma engine download; see `CONTAINERS.md` and the task evidence. Better Auth database sessions and profile/dictionary product routes are implemented; discovery, projects, conversations and SSE remain pending. See `API.md` for implemented contracts.
+Currently only `GET /health` exists in Bun workspaces: `apps/api/src/app.ts`, `apps/api/src/index.ts`, `apps/api/tests/unit/health.test.ts`, and `packages/api-client/src/index.ts`. A separate contract consumer fixture and GitHub Actions workflow are configured. PostgreSQL/Prisma dictionaries, committed migrations, isolated integration infrastructure and Docker/Compose configuration exist. Full local image build/startup is blocked on the Prisma engine download; see `CONTAINERS.md` and the task evidence. Better Auth database sessions, profiles/dictionaries, discovery/matches, project teams/applications, durable text conversations and SSE are implemented. See `API.md` for implemented contracts. Runtime SSE schemas live in browser-safe `packages/contracts`; the API contract remains type-only.
 
 Approved implementation direction:
 
