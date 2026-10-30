@@ -1,0 +1,49 @@
+schema: spec-driven
+
+context: |
+  Language: English. Keep requirements and scenario headings in English.
+  Aster connects IT collaborators for startups, hackathons, and side projects.
+  Agreed MVP: accounts/profiles, discovery, mutual matches, projects/applications,
+  teams, and private text conversations. Backend only; do not create a web app.
+  Current implementation: single-package Bun/Elysia/Eden health skeleton.
+  Target: modular monolith, Bun workspaces apps/api and packages/api-client,
+  Elysia/TypeBox public schemas, Eden Treaty, PostgreSQL/Prisma migrations,
+  Better Auth email/password with database sessions and HttpOnly cookies.
+  No OAuth, SMTP, email verification, or password recovery in this local MVP.
+  Full local stack via Dockerfile and Docker Compose; HTTP + SSE, single instance.
+  Biome, strict TypeScript, bun:test unit and PostgreSQL integration tests.
+  CI: frozen install, Prisma generation, lint/types/tests/migrations/API and image
+  builds on GitHub Actions. No smoke/E2E/browser suites, commitlint, image publishing,
+  or deployment. Conventional Commits is an agent rule, not a CI-enforced rule.
+  Git target: main at https://github.com/signaturekey/aster, small commits and pushes
+  after implementation approval. Actual green Actions is required for completion.
+  Implementation was explicitly approved on 2026-10-30 through Claude Code /goal.
+  Implementation, scoped local verification, coherent commits and pushes are authorized.
+  docs/backlog.md contains deferred ideas, not requirements for this goal.
+  Main specs describe implemented behavior; proposed additions belong in changes.
+
+rules:
+  proposal:
+    - Keep scope concise and distinguish agreed requirements from pending implementation approval.
+    - Explicitly exclude frontend, production deployment, and backlog features.
+  specs:
+    - Use SHALL or MUST and testable WHEN/THEN scenarios for every requirement.
+    - Specify authorization, privacy, state transitions, and concurrent writes where relevant.
+    - Do not require browser apps or smoke/E2E suites to verify this backend change.
+  design:
+    - Explain workspace type propagation, runtime validation, Docker startup, and CI acceptance.
+    - Separate current skeleton behavior from the agreed target; do not include historical project references.
+  tasks:
+    - Keep tasks independently verifiable, with tests and documentation in each implementation slice.
+    - Do not mark decisions or planning completion as implemented product functionality.
+
+operations:
+  apply:
+    guidance:
+      - Wait for explicit implementation approval after the user reviews the revised documents.
+      - Use small Conventional Commits on main; push only to the approved repository after approval.
+      - Run affected local checks and inspect actual GitHub Actions results; never equate local success with hosted CI success.
+      - Do not add smoke/E2E suites, implement backlog items, or deploy.
+  archive:
+    guidance:
+      - Archive only implemented and verified behavior, never merely completed planning artifacts.

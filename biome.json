@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
   "files": {
-    "includes": ["**", "!dist", "!node_modules", "!bun.lock"]
+    "includes": [
+      "**",
+      "!dist",
+      "!node_modules",
+      "!bun.lock",
+      "!.claude/skills/grill-me",
+      "!.claude/skills/grilling"
+    ]
   },
   "formatter": {
     "enabled": true,
