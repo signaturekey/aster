@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "bun:test";
 import { treaty } from "@elysia/eden";
-import { app } from "@/app";
+import { app } from "../../src/app";
 
 describe("GET /health", () => {
   it("returns the server status as JSON", async () => {

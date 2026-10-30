@@ -1,0 +1,24 @@
+{
+  "name": "@aster/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./contract": {
+      "types": "./src/contract.ts"
+    }
+  },
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun dist/index.js",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --sourcemap=external",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "elysia": "1.4.30"
+  },
+  "devDependencies": {
+    "@elysia/eden": "1.4.10",
+    "@types/bun": "1.4.4"
+  }
+}

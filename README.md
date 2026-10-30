@@ -1,88 +1,102 @@
 # Aster Backend
 
 Бэкенд платформы для поиска напарников и формирования команд для IT-проектов.
+Реализация MVP выполняется по `openspec/changes/define-it-matchmaking-mvp/`.
+Сейчас реализован только публичный `GET /health`: база данных и auth пока не нужны.
+Frontend, мобильное приложение и deployment не входят в этот change.
 
-## Стек
+## Стек и установка
 
-- Bun 1.4.4 — runtime, зависимости, сборка и тесты
-- Elysia — HTTP API
-- Eden Treaty — типизированный клиент API
-- TypeScript (strict) — проверка типов
-- Biome — линтинг и форматирование
-
-Prisma и PostgreSQL будут подключены при добавлении моделей данных. Текущий каркас не требует базы данных.
-
-## Запуск
-
-Установи [Bun](https://bun.sh/docs/installation), версия проекта указана в `.bun-version`.
+Bun **1.4.4**, Elysia **1.4.30**, Eden **1.4.10**, strict TypeScript и Biome.
+Версия Bun закреплена в `.bun-version` и `packageManager`. Пакеты устанавливаются
+из публичного npm registry (проектный `bunfig.toml`).
 
 ```sh
 bun install --frozen-lockfile
 bun run dev
 ```
 
-Сервер доступен на `http://localhost:3000`. Порт можно изменить через переменную окружения `PORT`:
+API доступен на `http://localhost:3000`. Другой порт:
 
 ```sh
 PORT=4000 bun run dev
 ```
 
-## API
-
-### `GET /health`
-
-Проверка работоспособности HTTP-приложения, без проверки внешних сервисов.
-
-```sh
-curl http://localhost:3000/health
-```
-
-Ответ: `200 OK`, `Content-Type: application/json`.
-
-```json
-{ "status": "ok" }
-```
-
-## Eden
-
-`src/client.ts` экспортирует фабрику клиента. Тип `App` импортируется через `import type`, поэтому серверный код не попадает в клиентскую сборку.
-
-```ts
-import { createClient } from "@/client";
-
-const api = createClient("http://localhost:3000");
-const { data, error } = await api.health.get();
-
-if (error) throw error;
-console.log(data.status); // тип: "ok"
-```
-
-Для будущего фронтенда на другом origin потребуется настроить CORS или dev-прокси. Сейчас фронтенд и монорепо не добавлены.
-
-## Команды
-
-| Команда              | Назначение                                  |
-| -------------------- | ------------------------------------------- |
-| `bun run dev`        | Сервер с перезапуском при изменениях        |
-| `bun run build`      | Сборка для Bun в `dist/`                    |
-| `bun run start`      | Запуск собранного сервера на Bun            |
-| `bun run check`      | Проверка Biome                              |
-| `bun run check:fix`  | Форматирование и безопасные автоисправления |
-| `bun run typecheck`  | Проверка типов                              |
-| `bun test`           | Однократный запуск тестов                   |
-| `bun run test:watch` | Тесты в режиме наблюдения                   |
-
-Сборка не проверяет типы. Перед деплоем запускай `check`, `typecheck`, тесты и сборку.
-
 ## Структура
 
 ```text
-src/
-  app.ts       # Elysia-приложение и тип App, без открытия порта
-  client.ts    # Фабрика типизированного Eden-клиента
-  index.ts     # Запуск HTTP-сервера
-tests/
-  health.test.ts
+apps/api/
+  src/app.ts                  # Elysia app и inferred App, без listener
+  src/contract.ts             # Только экспорт типа App
+  src/index.ts                # Запуск и остановка сервера
+  tests/unit/health.test.ts   # In-process HTTP и Eden
+packages/api-client/
+  src/index.ts                # Browser-safe Eden client
+  tests/client.test.ts        # Передача fetch/credentials
+fixtures/api-consumer/        # Отдельный TypeScript-потребитель, не frontend
+scripts/build-client.ts      # Browser build с проверкой входных модулей
+openspec/                    # План и реализованные спецификации
 ```
 
-Тесты вызывают `app.handle()` и Eden Treaty без запуска HTTP-сервера. Один `tsconfig.json` проверяет исходники и тесты; сборку выполняет Bun. Относительные импорты пишутся без расширений.
+Все пакеты используют общий strict baseline и собственные TypeScript configs.
+В контракте нет неоднозначного backend-алиаса `@/`.
+
+## API и общий клиент
+
+`GET /health` возвращает `200`, JSON `{ "status": "ok" }`, без проверки внешних
+сервисов. Импорт приложения не открывает порт.
+
+```ts
+import { createApiClient } from "@aster/api-client";
+
+const api = createApiClient("http://localhost:3000", {
+  fetch: { credentials: "include" },
+});
+const { data, error } = await api.health.get();
+if (error) throw error;
+console.log(data.status); // "ok"
+```
+
+`@aster/api/contract` имеет только `types` export. API — devDependency клиента,
+а не runtime dependency. Browser build проверяет, что в bundle есть Eden HTTP,
+но нет Elysia server, API или Prisma runtime. Отдельный consumer fixture проверяет
+inferred request/response/error types, отсутствие `any` и негативные assertions.
+Настройка credentials подготовлена для будущих cookie-сессий; auth/CORS ещё не реализованы.
+
+## Команды
+
+| Команда                          | Назначение                                                 |
+| -------------------------------- | ---------------------------------------------------------- |
+| `bun run dev`                    | API с watch                                                |
+| `bun run start`                  | Собранный API                                              |
+| `bun run check`                  | Biome                                                      |
+| `bun run check:fix`              | Форматирование и автоисправления                           |
+| `bun run typecheck`              | Root scripts, API, client, client tests и consumer fixture |
+| `bun test` / `bun run test:unit` | Unit/in-process тесты без listener и БД                    |
+| `bun run test:watch`             | Watch тестов                                               |
+| `bun run build`                  | API и проверяемая browser-сборка клиента                   |
+| `bun run build:api`              | Bun bundle в `apps/api/dist/`                              |
+| `bun run build:client`           | Browser bundle в `packages/api-client/dist/`               |
+
+`bun build` не заменяет проверку TypeScript. Перед коммитом:
+
+```sh
+bun install --frozen-lockfile
+bun run check
+bun run typecheck
+bun run test:unit
+bun run build
+```
+
+## CI и ограничения текущего этапа
+
+GitHub Actions выполняет эти же проверки на push в `main` и pull requests,
+с минимальными read permissions, ограничением времени и закреплёнными версиями.
+Prisma generation, PostgreSQL migrations/integration tests и Docker image build
+будут добавлены вместе с реальной инфраструктурой БД/контейнеров. Сейчас workflow
+не выдаёт отсутствие этих этапов за успешную проверку. Smoke/E2E/browser suites,
+публикация образов и deployment не предусмотрены.
+
+Dockerfile/Compose пока не реализованы; `docker compose up --build` ещё не является
+доступным способом запуска. Локальные проверки не доказывают успешный hosted CI:
+завершение goal требует green Actions для точного последнего pushed SHA.

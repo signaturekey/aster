@@ -1,0 +1,19 @@
+{
+  "name": "@aster/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@elysia/eden": "1.4.10"
+  },
+  "devDependencies": {
+    "@aster/api": "workspace:*",
+    "elysia": "1.4.30"
+  }
+}

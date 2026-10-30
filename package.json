@@ -1,29 +1,32 @@
 {
-  "name": "aster-backend",
-  "version": "0.1.0",
+  "name": "aster",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.4",
   "engines": {
     "bun": ">=1.4.4"
   },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "fixtures/*"
+  ],
   "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --sourcemap=external",
-    "start": "bun dist/index.js",
+    "dev": "bun run --filter @aster/api dev",
+    "start": "bun run --filter @aster/api start",
+    "build": "bun run build:api && bun run build:client",
+    "build:api": "bun run --filter @aster/api build",
+    "build:client": "bun run scripts/build-client.ts",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "test:watch": "bun test --watch"
+    "typecheck": "tsc --noEmit && bun run --filter '*' typecheck",
+    "test": "bun run test:unit",
+    "test:unit": "bun test apps/api/tests/unit packages/api-client/tests",
+    "test:watch": "bun test --watch apps/api/tests/unit packages/api-client/tests"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.3",
-    "@types/bun": "^1.4.4",
-    "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "@elysia/eden": "^1.4.10",
-    "elysia": "^1.4.30"
+    "@biomejs/biome": "2.6.4",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
   }
 }

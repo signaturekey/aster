@@ -12,7 +12,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## Current state and target architecture
 
-Currently only `GET /health` exists in a single package (`src/app.ts`, `src/index.ts`, `src/client.ts`, `tests/health.test.ts`). Database, auth, Docker, CI, and product modules are not implemented yet.
+Currently only `GET /health` exists in Bun workspaces: `apps/api/src/app.ts`, `apps/api/src/index.ts`, `apps/api/tests/unit/health.test.ts`, and `packages/api-client/src/index.ts`. A separate contract consumer fixture and early GitHub Actions workflow are configured. Database, auth, Docker, and product modules are not implemented yet.
 
 Approved implementation direction:
 
@@ -30,7 +30,7 @@ Approved implementation direction:
 - Use small modules: routes for HTTP/auth/schema boundaries, services for business operations and transactions, schemas for public contracts. Extract query files when useful, not by default.
 - Do not introduce generic repositories, DI containers, event buses, or speculative abstraction layers.
 - Chain Elysia route/plugin definitions and export the final inferred `App` type without starting a server. Do not widen it to bare `Elysia`.
-- Use extensionless imports. Current `@/` points to `src/`; during workspace migration, use relative imports or an API-specific namespace for contract-reachable backend files so future web aliases cannot collide.
+- Use extensionless relative imports for contract-reachable backend files so future web aliases cannot collide. The old root `@/` alias has been removed.
 - Export `@aster/api/contract` as types only. `@aster/api-client` must not import the API runtime or Prisma into browser bundles.
 - Use per-package TypeScript configs extending a shared baseline after migration. `bun build` does not replace type checking.
 - Never expose Prisma rows directly: select public fields, serialize timestamps to ISO strings, and exclude email/private account data from other users' responses.
@@ -55,7 +55,7 @@ Do not commit secrets, read unrelated credentials, publish packages/images, buy 
 
 ## Verification and completion
 
-Current commands (until workspace migration updates them):
+Current root commands (workspace checks include the standalone client consumer fixture):
 
 ```sh
 bun run check

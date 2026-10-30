@@ -4,18 +4,48 @@
   "workspaces": {
     "": {
       "name": "aster-backend",
+      "devDependencies": {
+        "@biomejs/biome": "2.6.4",
+        "@types/bun": "1.4.4",
+        "typescript": "7.0.2",
+      },
+    },
+    "apps/api": {
+      "name": "@aster/api",
+      "version": "0.1.0",
       "dependencies": {
-        "@elysia/eden": "^1.4.10",
-        "elysia": "^1.4.30",
+        "elysia": "1.4.30",
       },
       "devDependencies": {
-        "@biomejs/biome": "^2.6.3",
-        "@types/bun": "^1.4.4",
-        "typescript": "^7.0.2",
+        "@elysia/eden": "1.4.10",
+        "@types/bun": "1.4.4",
+      },
+    },
+    "fixtures/api-consumer": {
+      "name": "@aster/api-consumer-fixture",
+      "devDependencies": {
+        "@aster/api-client": "workspace:*",
+      },
+    },
+    "packages/api-client": {
+      "name": "@aster/api-client",
+      "version": "0.1.0",
+      "dependencies": {
+        "@elysia/eden": "1.4.10",
+      },
+      "devDependencies": {
+        "@aster/api": "workspace:*",
+        "elysia": "1.4.30",
       },
     },
   },
   "packages": {
+    "@aster/api": ["@aster/api@workspace:apps/api"],
+
+    "@aster/api-client": ["@aster/api-client@workspace:packages/api-client"],
+
+    "@aster/api-consumer-fixture": ["@aster/api-consumer-fixture@workspace:fixtures/api-consumer"],
+
     "@biomejs/biome": ["@biomejs/biome@2.6.4", "", { "optionalDependencies": { "@biomejs/cli-android-arm64": "2.6.4", "@biomejs/cli-android-x64": "2.6.4", "@biomejs/cli-darwin-arm64": "2.6.4", "@biomejs/cli-darwin-x64": "2.6.4", "@biomejs/cli-linux-arm64": "2.6.4", "@biomejs/cli-linux-arm64-musl": "2.6.4", "@biomejs/cli-linux-x64": "2.6.4", "@biomejs/cli-linux-x64-musl": "2.6.4", "@biomejs/cli-win32-arm64": "2.6.4", "@biomejs/cli-win32-x64": "2.6.4" }, "bin": { "biome": "bin/biome" } }, "sha512-8sKKwaNW4ot22awZ3lBjwWLHnUFXgXnrBPYS2gNlBAXRbDC++7kqjK2H7dR/FgCDtPvO1xfKpgEhJkGxAKYkxA=="],
 
     "@biomejs/cli-android-arm64": ["@biomejs/cli-android-arm64@2.6.4", "", { "os": "android", "cpu": "arm64" }, "sha512-jwrwigP4tBcHxzuV8izioX/BOUhJL/4e2rNSOE5nCjBkVC018LQAQUGiH+CNkFYvLtQ1dcZo5/xXERmaAGc7JQ=="],
