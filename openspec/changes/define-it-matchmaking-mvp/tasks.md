@@ -45,6 +45,15 @@ Implementation was explicitly approved on 2026-10-30 through the user's Claude C
 - [ ] 6.3 Reconcile README/CLAUDE/API documentation and checklist with the actual implementation; verify local Compose startup instructions, migration/test commands, all approved endpoint contracts, and backlog exclusions are accurate. Keep both `.gitkeep` files.
 - [ ] 6.4 Run frozen install, Prisma generation, lint, workspace types, unit/integration tests, API/client and Docker builds, plus strict OpenSpec validation; push the final coherent Conventional Commit and verify required GitHub Actions jobs succeed for that exact latest SHA. Record performed checks and any runtime checks not performed; do not declare completion with blockers or unverified hosted CI.
 
+## Execution Evidence (2026-10-30)
+
+- Planning baseline: `84cb61a85ee5ca9bf84851484937177de1a64077`.
+- Workspace/client implementation: `fd764e8`; early CI/checklist: `2659d05`.
+- Passed: frozen install, Biome (also after builds), root/workspace/consumer type checks, 4 unit/in-process tests, API build, browser client build with input-module inspection, workflow YAML parsing, and strict OpenSpec validation.
+- Task 1.5 blocked: `origin` configured to `https://github.com/signaturekey/aster` (no previous remote overwritten); push failed with `could not read Username for 'https://github.com': Device not configured`. Project-local GitHub CLI reports no authenticated hosts. No push, hosted Actions verification, history rewrite, publication, or deployment occurred.
+- Container prerequisites unavailable: both `avito` and `desktop-linux` Docker contexts fail to connect to their daemons. No unrelated VM/container was started or changed. PostgreSQL/container checks and Compose runtime were not performed.
+- Implementation is paused pending GitHub authorization and an available project-appropriate Docker daemon. Affected tasks remain open; local success is not goal completion.
+
 ## Workflow Follow-up
 
 - No implementation starts until the user approves the revised documents. Claude Code `/goal` is the user's execution mechanism, not a new tool to build here.
