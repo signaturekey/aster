@@ -15,7 +15,25 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
+    env:
+      # CI-only databases and credentials, never a developer's working database.
+      DATABASE_URL: postgresql://aster_ci:aster_ci_password@127.0.0.1:5432/aster_ci_work
+      TEST_DATABASE_URL: postgresql://aster_ci:aster_ci_password@127.0.0.1:5432/aster_test
+    services:
+      postgres:
+        image: postgres:18.3
+        env:
+          POSTGRES_DB: aster_ci_work
+          POSTGRES_USER: aster_ci
+          POSTGRES_PASSWORD: aster_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aster_ci -d aster_ci_work"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -25,11 +43,30 @@ jobs:
           bun-version: 1.4.4
       - name: Frozen install
         run: bun install --frozen-lockfile
+      - name: Generate Prisma client
+        run: bun run db:generate
       - name: Biome
         run: bun run check
       - name: Workspace and consumer types
         run: bun run typecheck
       - name: Unit tests
         run: bun run test:unit
+      - name: Create isolated integration database
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: >-
+          docker exec "$POSTGRES_CONTAINER"
+          psql -U aster_ci -d aster_ci_work -v ON_ERROR_STOP=1
+          -c 'CREATE DATABASE aster_test OWNER aster_ci;'
+      - name: Apply committed migrations and seed dictionaries
+        run: |
+          bun run db:migrate
+          bun run db:seed
+      - name: PostgreSQL integration tests
+        run: bun run test:integration
       - name: API and browser-safe client builds
         run: bun run build
+      - name: Validate Compose configuration
+        run: docker compose --profile test config --quiet
+      - name: Build API Docker image (no publication)
+        run: docker build --target runtime --tag aster-api:ci .

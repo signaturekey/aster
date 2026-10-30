@@ -1,0 +1,89 @@
+name: aster
+
+services:
+  db:
+    image: postgres:18.3
+    environment:
+      POSTGRES_DB: aster
+      POSTGRES_USER: ${POSTGRES_USER:-aster}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aster_local_password}
+    ports:
+      - "127.0.0.1:${DB_PORT:-55432}:5432"
+    volumes:
+      # PostgreSQL 18 stores versioned data directories below this mount.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    stop_grace_period: 30s
+
+  migrate:
+    build:
+      context: .
+      target: tools
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aster}:${POSTGRES_PASSWORD:-aster_local_password}@db:5432/aster
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "bun run db:migrate && bun run db:seed"]
+    init: true
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: runtime
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aster}:${POSTGRES_PASSWORD:-aster_local_password}@db:5432/aster
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+
+  test-db:
+    image: postgres:18.3
+    profiles: [test]
+    environment:
+      POSTGRES_DB: aster_test
+      POSTGRES_USER: aster_test
+      POSTGRES_PASSWORD: aster_test_local_password
+    ports:
+      - "127.0.0.1:${TEST_DB_PORT:-55433}:5432"
+    # Disposable and isolated: never mounts the working database volume.
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    stop_grace_period: 30s
+
+  integration:
+    build:
+      context: .
+      target: tools
+    profiles: [test]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aster}:${POSTGRES_PASSWORD:-aster_local_password}@db:5432/aster
+      TEST_DATABASE_URL: postgresql://aster_test:aster_test_local_password@test-db:5432/aster_test
+    depends_on:
+      test-db:
+        condition: service_healthy
+    command: ["bun", "run", "test:integration"]
+    init: true
+    restart: "no"
+
+volumes:
+  postgres-data:

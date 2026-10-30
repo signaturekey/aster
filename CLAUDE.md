@@ -12,7 +12,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## Current state and target architecture
 
-Currently only `GET /health` exists in Bun workspaces: `apps/api/src/app.ts`, `apps/api/src/index.ts`, `apps/api/tests/unit/health.test.ts`, and `packages/api-client/src/index.ts`. A separate contract consumer fixture and early GitHub Actions workflow are configured. Database, auth, Docker, and product modules are not implemented yet.
+Currently only `GET /health` exists in Bun workspaces: `apps/api/src/app.ts`, `apps/api/src/index.ts`, `apps/api/tests/unit/health.test.ts`, and `packages/api-client/src/index.ts`. A separate contract consumer fixture and GitHub Actions workflow are configured. PostgreSQL/Prisma dictionaries, committed migrations, isolated integration infrastructure and Docker/Compose configuration exist. Full local image build/startup is blocked on the Prisma engine download; see `CONTAINERS.md` and the task evidence. Auth and product modules are not implemented yet.
 
 Approved implementation direction:
 
@@ -58,9 +58,11 @@ Do not commit secrets, read unrelated credentials, publish packages/images, buy 
 Current root commands (workspace checks include the standalone client consumer fixture):
 
 ```sh
+bun run db:generate
 bun run check
 bun run typecheck
-bun test
+bun run test:unit
+bun run test:integration # Explicit isolated TEST_DATABASE_URL required
 bun run build
 ```
 

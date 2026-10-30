@@ -2,7 +2,8 @@
 
 Бэкенд платформы для поиска напарников и формирования команд для IT-проектов.
 Реализация MVP выполняется по `openspec/changes/define-it-matchmaking-mvp/`.
-Сейчас реализован только публичный `GET /health`: база данных и auth пока не нужны.
+Сейчас доступны публичный `GET /health` и инфраструктура PostgreSQL/Prisma со словарями.
+Auth и продуктовые endpoints ещё не реализованы. Health не требует БД.
 Frontend, мобильное приложение и deployment не входят в этот change.
 
 ## Стек и установка
@@ -13,6 +14,7 @@ Bun **1.4.4**, Elysia **1.4.30**, Eden **1.4.10**, strict TypeScript и Biome.
 
 ```sh
 bun install --frozen-lockfile
+bun run db:generate
 bun run dev
 ```
 
@@ -92,11 +94,54 @@ bun run build
 
 GitHub Actions выполняет эти же проверки на push в `main` и pull requests,
 с минимальными read permissions, ограничением времени и закреплёнными версиями.
-Prisma generation, PostgreSQL migrations/integration tests и Docker image build
-будут добавлены вместе с реальной инфраструктурой БД/контейнеров. Сейчас workflow
-не выдаёт отсутствие этих этапов за успешную проверку. Smoke/E2E/browser suites,
-публикация образов и deployment не предусмотрены.
+Добавлены Prisma generation, migrations/seed, PostgreSQL integration tests,
+Compose validation и Docker image build. CI использует разные `aster_ci_work`
+и `aster_test`. Smoke/E2E/browser suites, публикация образов и deployment не предусмотрены.
+Локальные проверки не заменяют green Actions для точного последнего pushed SHA.
 
-Dockerfile/Compose пока не реализованы; `docker compose up --build` ещё не является
-доступным способом запуска. Локальные проверки не доказывают успешный hosted CI:
-завершение goal требует green Actions для точного последнего pushed SHA.
+## PostgreSQL, миграции и словари
+
+Prisma/client/adapter **7.10.1**, `pg` **8.23.1**, PostgreSQL **18.3**.
+Generated client не коммитится; после frozen install запустите `bun run db:generate`.
+`bun run db:migrate` применяет только committed migrations (без reset/db push),
+`bun run db:seed` идемпотентно обновляет стабильные ID и labels. Обе команды требуют
+явный `DATABASE_URL`; CLI config имеет только нерабочий fallback для генерации.
+
+Engineering-default seed IDs (`apps/api/prisma/dictionaries.ts`):
+- Specializations: backend, frontend, fullstack, mobile, devops, data, design, qa, product.
+- Skills: typescript, javascript, python, go, rust, java, sql, react, docker, figma.
+- Experience: beginner, junior, middle, senior, lead.
+- Goals: startup, hackathon, side-project, learning, pair-programming.
+
+API словарей появится на этапе profiles; наличие строк БД не означает готовность endpoint.
+
+## Контейнеры и integration tests
+
+Полные инструкции — [CONTAINERS.md](CONTAINERS.md). Конфигурация обычного запуска:
+
+```sh
+docker compose up --build
+```
+
+Контейнеры не требуют host Bun. Рабочая БД сохраняет volume при stop/start.
+Тестовый PostgreSQL изолирован и disposable:
+
+```sh
+docker compose --profile test up -d --wait test-db
+DATABASE_URL=postgresql://aster:aster_local_password@127.0.0.1:55432/aster \
+TEST_DATABASE_URL=postgresql://aster_test:aster_test_local_password@127.0.0.1:55433/aster_test \
+bun run test:integration
+# Или полностью внутри контейнеров:
+docker compose --profile test run --build --rm integration
+```
+
+Integration runner требует явный `TEST_DATABASE_URL`, допускает только `aster_test`
+и отказывает при совпадении с рабочей БД даже через другой hostname/credentials.
+Он применяет миграции и seed до in-process тестов; не сбрасывает БД. `bun test`
+без выбора suite захватывает integration-файлы и намеренно откажет без runner:
+используйте `bun run test:unit` или `bun run test:integration`.
+
+Текущее ограничение окружения: полный local Docker build блокируется сетевой
+ошибкой загрузки Prisma schema-engine с `binaries.prisma.sh`. Проверены Compose config,
+dependency stages и PostgreSQL stop/start persistence, но migration/API containers
+ещё не запускались. Image build и полноценный container startup не объявлены успешными.
