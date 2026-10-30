@@ -2,24 +2,31 @@
 
 Aster helps IT people find collaborators for startups, hackathons, and side projects through discovery, mutual matches, and project teams.
 
-## Approval and scope
+## OpenSpec workflow
 
-- Implementation was explicitly approved on 2026-10-30 through the user's Claude Code `/goal` directive to execute the OpenSpec tasks. Document readiness alone is not implementation approval.
-- The completed Kysely change is archived at `openspec/changes/archive/2026-10-30-migrate-prisma-to-kysely/` with 23/23 tasks; implemented database lifecycle requirements live in `openspec/specs/database-lifecycle/spec.md`. The former MVP change is archived at `openspec/changes/archive/2026-10-30-define-it-matchmaking-mvp/` as superseded with 24/25 historical tasks verified; its local Prisma Docker check never passed. Keep future task tracking honest: check a task only after its work and stated verification pass.
-- Scope: a locally runnable backend and shared API client. Do not create `apps/web`, select a frontend framework, implement a mobile app, or deploy anything.
-- Deferred ideas are stored locally in Git-ignored `docs/backlog.md`. Read it directly when needed; ignore-aware searches may omit it, and fresh clones will not contain it. If absent, do not recreate it or infer additional scope. Do not implement backlog items without approval.
-- Canonical `openspec/specs/` describes implemented behavior. Do not sync or archive unimplemented requirements.
+**Current change:** none. Confirm with `openspec list --json` before starting work.
 
-## Current state and target architecture
+- `openspec/specs/` contains canonical requirements for implemented product and system behavior. Read the relevant capability specs before changing that behavior.
+- `openspec/changes/<change-name>/` contains active proposals, designs, delta specs and task checklists. Read the selected change's artifacts before implementation; use `openspec status --change <change-name>` to inspect its state.
+- `openspec/changes/archive/<date>-<change-name>/` stores closed changes and their decisions, task outcomes and verification evidence. Consult it for historical context, not as an active task list or authorization to implement deferred work. An archived change may be superseded or incomplete; read its closure notes.
+- Update the current-change pointer when work starts or is archived. Keep progress, dates, blockers and execution history in the change artifacts, not in this file.
+- Planning completeness is not implementation approval. Wait for the user's explicit approval before applying a new change. Mark tasks complete only after their work and stated verification pass; sync only implemented and verified requirements into canonical specs.
 
-The backend in `apps/api` uses Kysely + pg with handwritten types and a fresh snake_case SQL baseline. Better Auth, profiles/discovery/matches, projects/teams, messages and SSE are implemented; shared API client/contracts remain browser-safe. Ordinary local Docker build/startup, authenticated HTTP, SSE shutdown and restart persistence were exercised successfully on 2026-10-30. Detailed local docs are Git-ignored under `docs/`; root README stays concise. The former Prisma change remains archived as superseded; its historical failed checks are not rewritten.
+## Scope and repository map
 
-Approved implementation direction:
+- Scope: a locally runnable backend and shared API client. Do not create `apps/web`, select a frontend framework, implement a mobile app, or deploy anything without separate approval.
+- `apps/api/src/modules/` contains identity, profiles, discovery/matches, projects/teams and conversations. `apps/api/src/app.ts` composes the API without starting a listener; `src/index.ts` owns server startup/shutdown.
+- `apps/api/src/db/` contains the connection lifecycle, handwritten table types, SQL migrations and dictionary seed. See its README for database tooling and safety boundaries.
+- `apps/api/tests/` contains unit and real-PostgreSQL integration tests. `packages/api-client/` provides the typed Eden client; `packages/contracts/` provides browser-safe runtime contracts.
+- `scripts/` contains development and verification entrypoints. Root `README.md` covers quick start and common commands; keep it concise.
+- Detailed API/container notes and deferred ideas live locally in Git-ignored `docs/`. Read files directly when needed; ignore-aware searches may omit them, and fresh clones will not contain them. If `docs/backlog.md` is absent, do not recreate it or infer additional scope. Backlog items require separate approval.
+
+## Architecture
 
 - Bun workspaces: `apps/api` and `packages/api-client`; reserve `apps/web` for later.
 - Modular monolith: one API process and PostgreSQL. Modules: identity, profiles, discovery/matches, projects/teams, conversations.
 - Elysia + its TypeBox schemas for request validation and explicit public responses; Eden Treaty for the client. No duplicate DTO interfaces, Zod layer, or generated OpenAPI SDK.
-- Use Kysely + pg, handwritten database types and explicit reviewed SQL migrations. Physical names are snake_case with explicit public camelCase projections, no naming plugin or codegen. Product UUID/created_at defaults come from PostgreSQL; mutations explicitly update updated_at without triggers. Preserve no-op timestamps. The approved one-time local reset has been performed; normal startup/tests must never reset the working DB.
+- Use Kysely + pg, handwritten database types and explicit reviewed SQL migrations. Physical names are snake_case with explicit public camelCase projections, no naming plugin or codegen. Product UUID/created_at defaults come from PostgreSQL; mutations explicitly update updated_at without triggers. Preserve no-op timestamps. Normal startup/tests must never reset the working DB; any destructive database operation requires explicit, scoped approval.
 - Better Auth email/password, database-backed sessions, HttpOnly cookies, no cookie cache initially. No OAuth, email verification, SMTP, or password-reset flow in this local MVP.
 - HTTP message writes/history plus authenticated SSE events. Single-instance API; no Socket.IO, Redis, presence, typing indicators, or read receipts.
 - Dockerfile for the API and Docker Compose for the complete local stack, including migration startup. Normal container startup must not require Bun on the host.
@@ -50,10 +57,10 @@ Do not commit secrets, read unrelated credentials, publish packages/images, buy 
 ## Git and CI
 
 - Work on `main` unless the user asks for another branch. Preserve their edits.
-- After implementation approval, use small coherent commits and push to `https://github.com/signaturekey/aster` to verify GitHub Actions. Do not push during the current documentation review.
+- When commits and pushes are authorized, use small coherent commits and push only to `https://github.com/signaturekey/aster`. Do not treat approval of document edits as permission to commit or push.
 - Follow Conventional Commits: `<type>(<optional-scope>): <description>`, for example `feat(auth): add email sign-in`, `fix(matches): prevent duplicate matches`, or `ci: add backend checks`.
 - Do not add commitlint or commit hooks. Do not amend/reset/rewrite history, force-push, or bypass hooks/signing/checks without explicit approval.
-- Add GitHub Actions early for pushes to `main` and pull requests. Run frozen install, ESLint/Prettier, workspace type checks, unit tests, PostgreSQL migration/integration tests, API build, and Docker image build. No image publication or deployment.
+- Keep GitHub Actions for pushes to `main` and pull requests aligned with local commands: frozen install, ESLint/Prettier, workspace type checks, unit tests, PostgreSQL migration/integration tests, API/client builds and Docker image build. No image publication or deployment.
 - Hosted CI is only verified when the run for the latest pushed commit succeeds. If GitHub access is unavailable, report the blocker; do not equate local checks with a green Actions run.
 
 ## Verification and completion
