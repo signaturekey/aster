@@ -23,10 +23,12 @@ Approved implementation direction:
 - Better Auth email/password, database-backed sessions, HttpOnly cookies, no cookie cache initially. No OAuth, email verification, SMTP, or password-reset flow in this local MVP.
 - HTTP message writes/history plus authenticated SSE events. Single-instance API; no Socket.IO, Redis, presence, typing indicators, or read receipts.
 - Dockerfile for the API and Docker Compose for the complete local stack, including migration startup. Normal container startup must not require Bun on the host.
-- Biome, strict TypeScript, and `bun:test`. Unit and real-PostgreSQL integration tests; no smoke/E2E suites or browser tests.
+- ESLint + typescript-eslint (recommended rules and type-aware Promise checks), Prettier defaults, strict TypeScript, and `bun:test`. Keep lint configuration minimal; no stylistic plugins. Pin TypeScript within typescript-eslint's supported range. Unit and real-PostgreSQL integration tests; no smoke/E2E suites or browser tests.
 
 ## Code conventions
 
+- When writing or changing code, add comments in English near non-obvious logic to explain its purpose, the reasons for the chosen approach, and relevant constraints or consequences. Give the next engineer or agent enough context to understand the intent without reconstructing it from the implementation. Do not narrate obvious operations or add comments mechanically to every function.
+- Update related comments when behavior changes. Do not invent rationale: if it cannot be established from the code, tests, or documented requirements, ask for clarification. Comments explain intent and constraints; they do not replace checking the implementation and tests.
 - Use small modules: routes for HTTP/auth/schema boundaries, services for business operations and transactions, schemas for public contracts. Extract query files when useful, not by default.
 - Do not introduce generic repositories, DI containers, event buses, or speculative abstraction layers.
 - Chain Elysia route/plugin definitions and export the final inferred `App` type without starting a server. Do not widen it to bare `Elysia`.
@@ -51,7 +53,7 @@ Do not commit secrets, read unrelated credentials, publish packages/images, buy 
 - After implementation approval, use small coherent commits and push to `https://github.com/signaturekey/aster` to verify GitHub Actions. Do not push during the current documentation review.
 - Follow Conventional Commits: `<type>(<optional-scope>): <description>`, for example `feat(auth): add email sign-in`, `fix(matches): prevent duplicate matches`, or `ci: add backend checks`.
 - Do not add commitlint or commit hooks. Do not amend/reset/rewrite history, force-push, or bypass hooks/signing/checks without explicit approval.
-- Add GitHub Actions early for pushes to `main` and pull requests. Run frozen install, Prisma generation when introduced, Biome, workspace type checks, unit tests, PostgreSQL migration/integration tests, API build, and Docker image build. No image publication or deployment.
+- Add GitHub Actions early for pushes to `main` and pull requests. Run frozen install, Prisma generation when introduced, ESLint/Prettier, workspace type checks, unit tests, PostgreSQL migration/integration tests, API build, and Docker image build. No image publication or deployment.
 - Hosted CI is only verified when the run for the latest pushed commit succeeds. If GitHub access is unavailable, report the blocker; do not equate local checks with a green Actions run.
 
 ## Verification and completion

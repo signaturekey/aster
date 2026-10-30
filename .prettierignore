@@ -1,0 +1,6 @@
+**/dist/
+**/coverage/
+apps/api/src/generated/
+bun.lock
+.claude/
+docs/

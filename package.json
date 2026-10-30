@@ -16,8 +16,8 @@
     "build": "bun run build:api && bun run build:client",
     "build:api": "bun run --filter @aster/api build",
     "build:client": "bun run scripts/build-client.ts",
-    "check": "biome check .",
-    "check:fix": "biome check --write .",
+    "check": "bun --bun eslint . --max-warnings 0 && prettier . --check",
+    "check:fix": "bun --bun eslint . --fix --max-warnings 0 && prettier . --write",
     "typecheck": "tsc --noEmit && bun run --filter '*' typecheck",
     "db:generate": "bun --bun apps/api/node_modules/prisma/build/index.js generate --config apps/api/prisma.config.ts",
     "db:migrate": "bun --bun apps/api/node_modules/prisma/build/index.js migrate deploy --config apps/api/prisma.config.ts",
@@ -28,8 +28,12 @@
     "test:watch": "bun test --watch apps/api/tests/unit packages/api-client/tests"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.4",
+    "@eslint/js": "10.0.1",
     "@types/bun": "1.4.4",
-    "typescript": "7.0.2"
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1"
   }
 }

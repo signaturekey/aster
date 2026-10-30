@@ -67,6 +67,7 @@ Implementation was explicitly approved on 2026-10-30 through the user's Claude C
 - Backend source imports use `@api/*`, mapped in the API config and explicitly in the API-client config; the shared baseline stays package-agnostic.
 - API/container documentation moved to Git-ignored `docs/`; these local files are intentionally absent from fresh clones. README retains basic startup instructions. `scripts/` and OpenSpec archive are unchanged.
 - Prisma download investigation remains deferred by the user; cleanup does not resolve task 6.4.
+- Replaced Biome with ESLint + typescript-eslint recommended rules and three type-aware Promise checks, plus Prettier defaults. TypeScript pinned to 6.0.3 because typescript-eslint 8.72.1 supports TypeScript <6.1, not the previously installed 7.0.2. Root check/check:fix commands retained; CI and current tooling documentation updated. Verified frozen install, Prisma generation, lint/formatting, workspace types, 28 unit tests, 39 isolated PostgreSQL integration tests, API/browser-client builds, strict OpenSpec validation, and all three Promise rules against temporary invalid code (removed). Historical Biome evidence above is unchanged. Docker image/startup and hosted Actions were not reverified for this migration; task 6.4 remains open.
 
 ## Workflow Follow-up
 

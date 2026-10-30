@@ -44,6 +44,8 @@ test("dictionary seed is idempotent and stable", async () => {
 });
 
 test("database primary keys reject duplicate dictionary identifiers", async () => {
+  // Bun types this async matcher as void; it still needs to be awaited.
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await expect(
     Promise.resolve(
       db.goal.create({ data: { id: "startup", label: "Duplicate" } }),

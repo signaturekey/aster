@@ -45,7 +45,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Generate Prisma client
         run: bun run db:generate
-      - name: Biome
+      - name: ESLint and Prettier
         run: bun run check
       - name: Workspace types
         run: bun run typecheck

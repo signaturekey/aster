@@ -81,6 +81,7 @@ Review generated migration SQL; commit it and apply it to a clean integration da
 Initial entities: auth-owned User/Account/Session and adapter-required metadata, Profile and dictionary joins, DiscoveryDecision, Match, Project, ProjectMember, Application, Conversation, ConversationMember, Message.
 
 Constraints and coordinated transactions must cover:
+
 - unique actor/target decisions and canonically ordered user-pair matches;
 - coordinated reciprocal writes (stable pair lock or serializable transactions with bounded retry), because unique constraints alone can miss simultaneous mutual interest;
 - exactly one direct conversation per match and one project conversation per project;
@@ -128,6 +129,7 @@ Events are not guaranteed exactly once and do not replace history. Reconnect rec
 Provide a multi-stage API Dockerfile with pinned compatible Bun, frozen dependencies, explicit Prisma generation, and bundled API startup with required runtime assets. Container startup must not assume host Bun or committed generated artifacts.
 
 `docker-compose.yml` provides:
+
 - PostgreSQL with a health check and persistent volume;
 - a migration step using the API image, waiting for the healthy database and applying committed migrations;
 - the API, waiting for successful migrations, with documented local port and graceful shutdown.
@@ -141,9 +143,10 @@ Document `docker compose up --build`, stop/start, migration, and isolated test c
 After review approval, work on `main` and use small coherent Conventional Commits. GitHub target: `https://github.com/signaturekey/aster`. Configure/verify the intended remote before pushing; do not overwrite an unexpected remote or rewrite remote history. Record the existing planning changes in a dedicated documentation commit before implementation. No commitlint, hooks, force pushes, amend, or bypassing checks.
 
 Add GitHub Actions in the first implementation slices for pushes to `main` and pull requests. Use minimal read permissions, explicit timeouts, and pinned tool versions. Root scripts are shared between local and hosted verification. Pipeline:
+
 1. frozen lockfile install;
 2. Prisma generation once introduced;
-3. Biome;
+3. ESLint + typescript-eslint (recommended rules and type-aware Promise checks) and Prettier;
 4. workspace TypeScript checks;
 5. unit tests;
 6. committed migrations on clean PostgreSQL service database and integration tests;

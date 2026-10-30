@@ -54,7 +54,8 @@ bun run dev
 Основные команды:
 
 ```sh
-bun run check          # Линтинг и форматирование
+bun run check          # ESLint + Prettier: линтинг и проверка форматирования
+bun run check:fix      # Автоисправления ESLint и форматирование Prettier
 bun run typecheck      # Проверка типов
 bun run test:unit      # Unit-тесты
 bun run build          # Сборка API и клиента

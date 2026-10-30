@@ -33,9 +33,8 @@ test("rejects cursor IDs that PostgreSQL cannot represent", () => {
 });
 
 test("shared page options reject limits before service queries", async () => {
-  const { pageOptions, beforeCursor, pageResult } = await import(
-    "@api/lib/pagination"
-  );
+  const { pageOptions, beforeCursor, pageResult } =
+    await import("@api/lib/pagination");
   expect(pageOptions({})).toEqual({ limit: 20, cursor: undefined });
   for (const limit of [0, 51, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
     expect(() => pageOptions({ limit })).toThrow("Limit must be from 1 to 50");
