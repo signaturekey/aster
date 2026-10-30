@@ -6,6 +6,7 @@
       "!**/dist",
       "!**/node_modules",
       "!bun.lock",
+      "!apps/api/src/generated",
       "!.claude/skills/grill-me",
       "!.claude/skills/grilling"
     ]

@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Specialization {
+  id    String @id
+  label String
+}
+
+model Skill {
+  id    String @id
+  label String
+}
+
+model ExperienceLevel {
+  id    String @id
+  label String
+}
+
+model Goal {
+  id    String @id
+  label String
+}

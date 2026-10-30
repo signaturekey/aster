@@ -20,6 +20,10 @@
     "check": "biome check .",
     "check:fix": "biome check --write .",
     "typecheck": "tsc --noEmit && bun run --filter '*' typecheck",
+    "db:generate": "bun --bun apps/api/node_modules/prisma/build/index.js generate --config apps/api/prisma.config.ts",
+    "db:migrate": "bun --bun apps/api/node_modules/prisma/build/index.js migrate deploy --config apps/api/prisma.config.ts",
+    "db:seed": "bun apps/api/prisma/seed.ts",
+    "test:integration": "bun scripts/test-integration.ts",
     "test": "bun run test:unit",
     "test:unit": "bun test apps/api/tests/unit packages/api-client/tests",
     "test:watch": "bun test --watch apps/api/tests/unit packages/api-client/tests"
