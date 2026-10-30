@@ -1,9 +1,9 @@
+import { pageQuerySchema } from "@api/lib/pagination";
 import { profileSchema } from "@api/modules/profiles/schemas";
 import { t } from "elysia";
 
 export const discoveryQuerySchema = t.Object({
-  limit: t.Optional(t.Integer({ minimum: 1, maximum: 50, default: 20 })),
-  cursor: t.Optional(t.String({ maxLength: 512 })),
+  ...pageQuerySchema.properties,
   specializationId: t.Optional(t.String({ minLength: 1, maxLength: 80 })),
   experienceId: t.Optional(t.String({ minLength: 1, maxLength: 80 })),
   skillIds: t.Optional(

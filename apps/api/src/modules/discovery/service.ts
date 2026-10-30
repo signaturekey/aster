@@ -7,6 +7,7 @@ import {
   pageOptions,
   pageResult,
 } from "@api/lib/pagination";
+import { createDirectConversation } from "@api/modules/conversations/membership";
 import type { DiscoveryQuery } from "@api/modules/discovery/schemas";
 import {
   profileSelect,
@@ -191,18 +192,15 @@ export async function setDecision(
     if (value !== "interested" || reciprocal?.value !== "interested")
       return { value, match: null };
     const match = await tx.match.create({
-      data: {
-        lowId,
-        highId,
-        conversation: {
-          create: {
-            members: { create: [{ userId: lowId }, { userId: highId }] },
-          },
-        },
-      },
+      data: { lowId, highId },
+      select: { id: true },
+    });
+    await createDirectConversation(tx, match.id, [lowId, highId]);
+    const result = await tx.match.findUniqueOrThrow({
+      where: { id: match.id },
       select: matchSelect,
     });
-    return { value, match: publicMatch(match) };
+    return { value, match: publicMatch(result) };
   });
 }
 

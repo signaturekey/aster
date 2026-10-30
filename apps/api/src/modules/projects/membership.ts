@@ -1,5 +1,6 @@
 import type { Database } from "@api/db/client";
 import { ProductError } from "@api/lib/errors";
+import { removeProjectConversationMember } from "@api/modules/conversations/membership";
 import {
   lockProject,
   projectSelect,
@@ -35,9 +36,7 @@ export async function removeMember(
     });
     if (!membership)
       throw new ProductError(404, "MEMBER_NOT_FOUND", "Membership not found.");
-    await tx.conversationMember.deleteMany({
-      where: { userId, conversation: { projectId } },
-    });
+    await removeProjectConversationMember(tx, projectId, userId);
     await tx.projectMember.delete({
       where: { projectId_userId: { projectId, userId } },
       select: { userId: true },

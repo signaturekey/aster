@@ -1,6 +1,7 @@
 import type { Database } from "@api/db/client";
 import type { ConversationEvent } from "@api/events";
 import { ProductError } from "@api/lib/errors";
+import { logUnexpectedError } from "@api/lib/diagnostics";
 import { requireConversationMember } from "@api/modules/conversations/service";
 
 const MAX_QUEUED_EVENTS = 32;
@@ -58,8 +59,12 @@ export function createConversationStreams(db: Database) {
       });
     } catch (error) {
       // A revoked member may still receive notifications for other conversations.
-      if (!(error instanceof ProductError && error.status === 404))
+      if (!(error instanceof ProductError && error.status === 404)) {
+        logUnexpectedError(error, {
+          operation: event ? "sse.delivery" : "sse.heartbeat",
+        });
         connection.close();
+      }
     }
   }
 
@@ -137,14 +142,15 @@ export function createConversationStreams(db: Database) {
           select: { userId: true },
         });
         await Promise.all(
-          members.map(({ userId }) => {
+          members.map(async ({ userId }) => {
             const connection = connections.get(userId);
             // Selection only narrows recipients: deliver still checks current
             // session/membership under locks to serialize racing revocations.
             return connection ? deliver(userId, connection, event) : undefined;
           }),
         );
-      } catch {
+      } catch (error) {
+        logUnexpectedError(error, { operation: "sse.recipients" });
         // Recipient lookup is also best-effort after commit. Leave streams alone;
         // clients recover missed notifications from authoritative HTTP history.
       }

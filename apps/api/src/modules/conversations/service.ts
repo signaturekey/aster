@@ -7,6 +7,7 @@ import {
   pageOptions,
   pageResult,
 } from "@api/lib/pagination";
+import { lockProjectRow } from "@api/modules/projects/coordination";
 
 export type ConversationTransaction = Prisma.TransactionClient;
 
@@ -23,7 +24,7 @@ export async function requireConversationMember(
   });
   if (!source) throw notFound();
   if (source.projectId) {
-    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${source.projectId} FOR UPDATE`;
+    if (!(await lockProjectRow(tx, source.projectId))) throw notFound();
   } else {
     // Also serializes idempotent direct-message writes for this conversation.
     await tx.$queryRaw`SELECT id FROM "Conversation" WHERE id = ${conversationId} FOR UPDATE`;

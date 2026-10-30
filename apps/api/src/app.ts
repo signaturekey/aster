@@ -4,7 +4,9 @@ import { createConversationStreams } from "@api/modules/conversations/streams";
 import { discoveryRoutes } from "@api/modules/discovery/routes";
 import type { Auth } from "@api/modules/identity/service";
 import { projectRoutes } from "@api/modules/projects/routes";
-import { productRoutes } from "@api/product";
+import { httpBoundary } from "@api/lib/http";
+import { identityRoutes } from "@api/modules/identity/routes";
+import { profileRoutes } from "@api/modules/profiles/routes";
 import { Elysia, t } from "elysia";
 
 const health = () =>
@@ -26,7 +28,10 @@ export const createApp = (
   streams = createConversationStreams(db),
 ) =>
   health()
-    .use(productRoutes(db, auth, trustedOrigins))
+    .use(httpBoundary(trustedOrigins))
+    .mount(auth.handler)
+    .use(identityRoutes(db, auth, trustedOrigins))
+    .use(profileRoutes(db, auth, trustedOrigins))
     .use(discoveryRoutes(db, auth, trustedOrigins))
     .use(projectRoutes(db, auth, trustedOrigins))
     .group("/api/v1", (routes) =>

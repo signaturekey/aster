@@ -2,6 +2,7 @@ import type { Database } from "@api/db/client";
 import type { Prisma } from "@api/generated/prisma/client";
 import { ProductError } from "@api/lib/errors";
 import { beforeCursor, pageOptions, pageResult } from "@api/lib/pagination";
+import { addProjectConversationMember } from "@api/modules/conversations/membership";
 import { requireCompleteProfile } from "@api/modules/profiles/service";
 import type {
   PageQuery,
@@ -155,19 +156,11 @@ export async function transitionApplication(
       );
     if (outcome === "accepted") {
       if (!project.recruitmentOpen) throw recruitmentClosed();
-      const conversation = await tx.conversation.findUnique({
-        where: { projectId: project.id },
-        select: { id: true },
-      });
-      if (!conversation) throw new Error("Project conversation is missing");
       await tx.projectMember.create({
         data: { projectId: project.id, userId: application.userId },
         select: { userId: true },
       });
-      await tx.conversationMember.create({
-        data: { conversationId: conversation.id, userId: application.userId },
-        select: { userId: true },
-      });
+      await addProjectConversationMember(tx, project.id, application.userId);
     }
     return publicApplication(
       await tx.application.update({

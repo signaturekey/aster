@@ -1,6 +1,9 @@
-import { ProductError } from "@api/lib/errors";
+import type { Database } from "@api/db/client";
+import { errorResponses, ProductError } from "@api/lib/errors";
+import { profileSchema } from "@api/modules/profiles/schemas";
+import { getProfile } from "@api/modules/profiles/service";
 import type { Auth } from "@api/modules/identity/service";
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
 
 export function identityGuard(auth: Auth, trustedOrigins: string[]) {
   return new Elysia({ name: "identity-guard" }).resolve(
@@ -40,4 +43,33 @@ export function identityGuard(auth: Auth, trustedOrigins: string[]) {
       return { actor: session.user, session: session.session };
     },
   );
+}
+
+export function identityRoutes(
+  db: Database,
+  auth: Auth,
+  trustedOrigins: string[],
+) {
+  return new Elysia({ prefix: "/api/v1", normalize: false })
+    .use(identityGuard(auth, trustedOrigins))
+    .get(
+      "/me",
+      async ({ actor }) => ({
+        id: actor.id,
+        email: actor.email,
+        name: actor.name,
+        profile: await getProfile(db, actor.id),
+      }),
+      {
+        response: {
+          200: t.Object({
+            id: t.String(),
+            email: t.String(),
+            name: t.String(),
+            profile: profileSchema,
+          }),
+          ...errorResponses,
+        },
+      },
+    );
 }

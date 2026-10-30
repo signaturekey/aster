@@ -6,7 +6,11 @@ import type {
   PublicProfile,
 } from "@api/modules/profiles/schemas";
 
-// Never load User, Account, or Session relations into a public profile read.
+// Never load private User fields, Account, or Session relations into a public read.
+export const defaultProfileUserSelect = {
+  id: true,
+  createdAt: true,
+} satisfies Prisma.UserSelect;
 export const profileSelect = {
   userId: true,
   displayName: true,
@@ -22,6 +26,24 @@ export const profileSelect = {
 } satisfies Prisma.ProfileSelect;
 
 type ProfileRow = Prisma.ProfileGetPayload<{ select: typeof profileSelect }>;
+
+export function defaultProfile(
+  user: Prisma.UserGetPayload<{ select: typeof defaultProfileUserSelect }>,
+): ProfileRow {
+  return {
+    userId: user.id,
+    displayName: "",
+    bio: "",
+    specializationId: null,
+    experienceId: null,
+    portfolioLinks: [],
+    discoverable: false,
+    skills: [],
+    goals: [],
+    createdAt: user.createdAt,
+    updatedAt: user.createdAt,
+  };
+}
 
 export function publicProfile(row: ProfileRow): PublicProfile {
   const skillIds = row.skills.map(({ skillId }) => skillId).sort();
@@ -49,7 +71,7 @@ export function publicProfile(row: ProfileRow): PublicProfile {
   };
 }
 
-async function ensureProfile(
+async function initializeProfile(
   db: Database | Prisma.TransactionClient,
   userId: string,
 ) {
@@ -60,8 +82,8 @@ async function ensureProfile(
   if (!user)
     throw new ProductError(404, "PROFILE_NOT_FOUND", "Profile not found.");
 
-  // The unique key plus ON CONFLICT handles simultaneous first profile reads.
-  // No auth-hook side effect is needed, and unknown users never gain profiles.
+  // Only mutations initialize profiles. ON CONFLICT coordinates first PATCHes;
+  // the enclosing transaction rolls initialization back if the update fails.
   await db.profile.createMany({ data: [{ userId }], skipDuplicates: true });
 }
 
@@ -75,11 +97,13 @@ async function getProfileRow(
   });
   if (profile) return profile;
 
-  await ensureProfile(db, userId);
-  return db.profile.findUniqueOrThrow({
-    where: { userId },
-    select: profileSelect,
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: defaultProfileUserSelect,
   });
+  if (!user)
+    throw new ProductError(404, "PROFILE_NOT_FOUND", "Profile not found.");
+  return defaultProfile(user);
 }
 
 export async function getProfile(
@@ -133,7 +157,7 @@ export async function updateProfile(
     )
       throw invalidDictionary();
 
-    await ensureProfile(tx, userId);
+    await initializeProfile(tx, userId);
     // Serialize replacements of join collections with simultaneous PATCH calls.
     await tx.$queryRaw`SELECT "userId" FROM "Profile" WHERE "userId" = ${userId} FOR UPDATE`;
 

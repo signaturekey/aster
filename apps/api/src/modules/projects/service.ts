@@ -1,8 +1,12 @@
 import type { Database } from "@api/db/client";
 import type { Prisma } from "@api/generated/prisma/client";
 import { ProductError } from "@api/lib/errors";
+import { lockProjectRow } from "@api/modules/projects/coordination";
+import { createProjectConversation } from "@api/modules/conversations/membership";
 import { beforeCursor, pageOptions, pageResult } from "@api/lib/pagination";
 import {
+  defaultProfile,
+  defaultProfileUserSelect,
   profileSelect,
   publicProfile,
   requireCompleteProfile,
@@ -50,10 +54,7 @@ export const projectNotFound = () =>
 // All project mutations, application transitions, and project message writes
 // coordinate on this row. Read state only after acquiring the lock.
 export async function lockProject(tx: Prisma.TransactionClient, id: string) {
-  const rows = await tx.$queryRaw<{ id: string }[]>`
-    SELECT "id" FROM "Project" WHERE "id" = ${id} FOR UPDATE
-  `;
-  if (!rows.length) throw projectNotFound();
+  if (!(await lockProjectRow(tx, id))) throw projectNotFound();
   return tx.project.findUniqueOrThrow({
     where: { id },
     select: projectSelect,
@@ -114,12 +115,11 @@ export async function createProject(
           create: input.requiredSkillIds.map((skillId) => ({ skillId })),
         },
         members: { create: { userId: actorId } },
-        conversation: {
-          create: { members: { create: { userId: actorId } } },
-        },
       },
       select: projectSelect,
     });
+    // Keep project, owner and chat creation atomic through the shared chat operation.
+    await createProjectConversation(tx, project.id, actorId);
     return publicProject(project);
   });
 }
@@ -225,17 +225,14 @@ export async function listMembers(
       );
       const missingIds = userIds.filter((userId) => !profiles.has(userId));
       if (missingIds.length) {
-        // Preserve lazy profile creation for legacy members without issuing
-        // per-member reads or writes. Normal create/apply flows already have profiles.
-        await tx.profile.createMany({
-          data: missingIds.map((userId) => ({ userId })),
-          skipDuplicates: true,
+        // Legacy members use the same read-only defaults as known-ID profiles.
+        // One public-only user lookup keeps hydration independent of roster size.
+        const users = await tx.user.findMany({
+          where: { id: { in: missingIds } },
+          select: defaultProfileUserSelect,
         });
-        const created = await tx.profile.findMany({
-          where: { userId: { in: missingIds } },
-          select: profileSelect,
-        });
-        for (const row of created) profiles.set(row.userId, publicProfile(row));
+        for (const user of users)
+          profiles.set(user.id, publicProfile(defaultProfile(user)));
       }
       const items: PublicMember[] = page.items.map((row) => {
         const profile = profiles.get(row.userId);
