@@ -193,6 +193,10 @@ test("message validation, exact content, concurrent request deduplication and co
     { text: "ok", requestId: "" },
     { text: "ok", requestId: "x".repeat(129) },
     { text: "ok", requestId: "spoof", senderId: b.id },
+    ...["\u0000", "\ud800", "\udfff"].flatMap((invalid) => [
+      { text: `hello${invalid}`, requestId: "invalid-text" },
+      { text: "hello", requestId: `invalid${invalid}` },
+    ]),
   ])
     expect(
       (await request(messages(conversation.id), a.cookie, body)).status,
@@ -207,6 +211,15 @@ test("message validation, exact content, concurrent request deduplication and co
   );
   expect(first).toEqual(second);
   expect(first.text).toBe("  same  ");
+  const unicode = "  hello 🌌 e\u0301  ";
+  const unicodeFirst = await (
+    await send(conversation.id, a.cookie, unicode, "unicode")
+  ).json();
+  const unicodeRetry = await (
+    await send(conversation.id, a.cookie, unicode, "unicode")
+  ).json();
+  expect(unicodeFirst.text).toBe(unicode);
+  expect(unicodeRetry).toEqual(unicodeFirst);
   expect((await send(conversation.id, a.cookie, "same", "retry")).status).toBe(
     409,
   );
@@ -761,4 +774,39 @@ test("shutdown seals the stream registry against requests still authenticating",
   expect(
     streams.connect(user.id, session.id, new AbortController().signal).status,
   ).toBe(503);
+});
+
+test("product HTTP boundaries reject unsafe profile and project strings", async () => {
+  const user = await register();
+  for (const invalid of ["\u0000", "\ud800", "\udfff"]) {
+    for (const body of [
+      { displayName: `name${invalid}` },
+      { bio: invalid },
+      { portfolioLinks: [`https://example.test/${invalid}`] },
+    ])
+      expect(
+        (
+          await identityRequest("/api/v1/me/profile", {
+            method: "PATCH",
+            cookie: user.cookie,
+            body,
+          })
+        ).status,
+      ).toBe(422);
+    expect(
+      (
+        await identityRequest("/api/v1/projects", {
+          method: "POST",
+          cookie: user.cookie,
+          body: {
+            title: `title${invalid}`,
+            description: "description",
+            goalId: "startup",
+            requiredRoles: ["dev"],
+            requiredSkillIds: [],
+          },
+        })
+      ).status,
+    ).toBe(422);
+  }
 });

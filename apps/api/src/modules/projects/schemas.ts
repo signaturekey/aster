@@ -1,18 +1,19 @@
+import { postgresText } from "@api/lib/strings";
 import type { pageQuerySchema } from "@api/lib/pagination";
 import { profileSchema } from "@api/modules/profiles/schemas";
 import { t } from "elysia";
 
-const idSchema = t.String({ minLength: 1, maxLength: 128 });
-const dictionaryIdSchema = t.String({ minLength: 1, maxLength: 80 });
-const timestampSchema = t.String({ format: "date-time" });
+const idSchema = postgresText({ minLength: 1, maxLength: 128 });
+const dictionaryIdSchema = postgresText({ minLength: 1, maxLength: 80 });
+const timestampSchema = postgresText({ format: "date-time" });
 // Explicit engineering limits: title 120, description 5,000, 1–10 roles
 // of 80 characters, 20 unique skills, and application text 2,000 characters.
 const recruitmentFields = {
-  title: t.String({ minLength: 1, maxLength: 120, pattern: "\\S" }),
-  description: t.String({ minLength: 1, maxLength: 5000, pattern: "\\S" }),
+  title: postgresText({ minLength: 1, maxLength: 120, pattern: "\\S" }),
+  description: postgresText({ minLength: 1, maxLength: 5000, pattern: "\\S" }),
   goalId: dictionaryIdSchema,
   requiredRoles: t.Array(
-    t.String({ minLength: 1, maxLength: 80, pattern: "\\S" }),
+    postgresText({ minLength: 1, maxLength: 80, pattern: "\\S" }),
     { minItems: 1, maxItems: 10 },
   ),
   requiredSkillIds: t.Array(dictionaryIdSchema, {
@@ -41,7 +42,7 @@ export const projectSchema = t.Object(
   { additionalProperties: false },
 );
 export const applicationCreateSchema = t.Object(
-  { text: t.String({ minLength: 1, maxLength: 2000, pattern: "\\S" }) },
+  { text: postgresText({ minLength: 1, maxLength: 2000, pattern: "\\S" }) },
   { additionalProperties: false },
 );
 export const applicationStateSchema = t.Union([
@@ -55,7 +56,7 @@ export const applicationSchema = t.Object(
     id: idSchema,
     projectId: idSchema,
     userId: idSchema,
-    text: t.String({ minLength: 1, maxLength: 2000 }),
+    text: postgresText({ minLength: 1, maxLength: 2000 }),
     state: applicationStateSchema,
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
@@ -74,15 +75,15 @@ export const memberSchema = t.Object(
 );
 export const projectPageSchema = t.Object({
   items: t.Array(projectSchema, { maxItems: 50 }),
-  nextCursor: t.Union([t.String(), t.Null()]),
+  nextCursor: t.Union([postgresText(), t.Null()]),
 });
 export const applicationPageSchema = t.Object({
   items: t.Array(applicationSchema, { maxItems: 50 }),
-  nextCursor: t.Union([t.String(), t.Null()]),
+  nextCursor: t.Union([postgresText(), t.Null()]),
 });
 export const memberPageSchema = t.Object({
   items: t.Array(memberSchema, { maxItems: 50 }),
-  nextCursor: t.Union([t.String(), t.Null()]),
+  nextCursor: t.Union([postgresText(), t.Null()]),
 });
 export const projectParamsSchema = t.Object({ projectId: idSchema });
 export const applicationParamsSchema = t.Object({ applicationId: idSchema });

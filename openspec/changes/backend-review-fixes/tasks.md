@@ -2,7 +2,7 @@
 
 ## 1. Text fidelity
 
-- [ ] 1.1 Reject unsafe persisted product strings; verify schema/unit and HTTP PostgreSQL regressions including exact valid Unicode retries.
+- [x] 1.1 Reject unsafe persisted product strings; verify schema/unit and HTTP PostgreSQL regressions including exact valid Unicode retries.
 
 ## 2. Conversation authorization and delivery
 

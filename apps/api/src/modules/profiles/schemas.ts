@@ -1,7 +1,9 @@
+import { postgresText, isPostgresText } from "@api/lib/strings";
 import { t } from "elysia";
 import { FormatRegistry } from "elysia/type-system";
 
 FormatRegistry.Set("aster-http-url", (value) => {
+  if (!isPostgresText(value)) return false;
   if (!/^https?:\/\/[^/?#\\]/i.test(value) || /\s/.test(value)) return false;
   try {
     const url = new URL(value);
@@ -16,9 +18,9 @@ FormatRegistry.Set("aster-http-url", (value) => {
 // Engineering defaults, shared by PATCH validation and public responses:
 // display name 80 characters, bio 2,000, IDs 80, at most 20 unique skills,
 // 5 unique goals, and 5 HTTP(S) portfolio links of at most 2,048 characters.
-const idSchema = t.String({ minLength: 1, maxLength: 80 });
-const displayNameSchema = t.String({ maxLength: 80 });
-const bioSchema = t.String({ maxLength: 2000 });
+const idSchema = postgresText({ minLength: 1, maxLength: 80 });
+const displayNameSchema = postgresText({ maxLength: 80 });
+const bioSchema = postgresText({ maxLength: 2000 });
 const nullableIdSchema = t.Union([idSchema, t.Null()]);
 const skillIdsSchema = t.Array(idSchema, { maxItems: 20, uniqueItems: true });
 const goalIdsSchema = t.Array(idSchema, { maxItems: 5, uniqueItems: true });
@@ -68,14 +70,14 @@ export const profileSchema = t.Object(
       maxItems: 4,
       uniqueItems: true,
     }),
-    createdAt: t.String({ format: "date-time" }),
-    updatedAt: t.String({ format: "date-time" }),
+    createdAt: postgresText({ format: "date-time" }),
+    updatedAt: postgresText({ format: "date-time" }),
   },
   { additionalProperties: false },
 );
 
 const dictionaryItemSchema = t.Object(
-  { id: idSchema, label: t.String() },
+  { id: idSchema, label: postgresText() },
   { additionalProperties: false },
 );
 

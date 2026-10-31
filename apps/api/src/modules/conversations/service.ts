@@ -1,8 +1,9 @@
+import { lockProjectRow } from "@api/modules/projects/coordination";
 import type { SqlDatabase, SqlTransaction } from "@api/db/kysely";
 import { ProductError } from "@api/lib/errors";
 import { pageOptions, pageResult, type PageQuery } from "@api/lib/pagination";
 import { sql } from "kysely";
-import { lockProjectRow } from "@api/modules/projects/coordination";
+import { isPostgresText } from "@api/lib/strings";
 
 export async function requireConversationMember(
   tx: SqlTransaction,
@@ -122,6 +123,8 @@ export async function sendMessage(
   input: { text: string; requestId: string },
 ) {
   if (
+    !isPostgresText(input.text) ||
+    !isPostgresText(input.requestId) ||
     !input.text.trim() ||
     input.text.length > 4000 ||
     !input.requestId.length ||
