@@ -1,4 +1,3 @@
-import { lockProjectRow } from "@api/modules/projects/coordination";
 import type { SqlDatabase, SqlTransaction } from "@api/db/kysely";
 import { ProductError } from "@api/lib/errors";
 import { pageOptions, pageResult, type PageQuery } from "@api/lib/pagination";
@@ -19,16 +18,18 @@ export async function requireConversationMember(
     new ProductError(404, "NOT_FOUND", "Conversation not found");
   if (!source) throw notFound();
   if (source.project_id) {
-    // Same source row as recruitment, ownership and membership mutations.
-    if (!(await lockProjectRow(tx, source.project_id))) throw notFound();
-  } else {
-    await tx
-      .selectFrom("conversations")
+    // Shared authorization locks permit concurrent reads/deliveries while still
+    // blocking the exclusive project lock used by membership revocations.
+    const project = await tx
+      .selectFrom("projects")
       .select("id")
-      .where("id", "=", conversationId)
-      .forUpdate()
-      .execute();
+      .where("id", "=", source.project_id)
+      .forShare()
+      .executeTakeFirst();
+    if (!project) throw notFound();
   }
+  // Direct membership is immutable: unlike a project roster it has no revoke
+  // mutation to coordinate, and sends acquire their exclusive lock separately.
   const member = await tx
     .selectFrom("conversation_members")
     .select("user_id")
@@ -133,6 +134,14 @@ export async function sendMessage(
     throw new ProductError(422, "VALIDATION_ERROR", "Message is invalid");
   return db.transaction().execute(async (tx) => {
     await requireConversationMember(tx, userId, conversationId);
+    // Authorization is shared; only writes serialize on the conversation so
+    // concurrent request-id retries still observe the preceding committed row.
+    await tx
+      .selectFrom("conversations")
+      .select("id")
+      .where("id", "=", conversationId)
+      .forUpdate()
+      .execute();
     const existing = await tx
       .selectFrom("messages")
       .select(messageColumns)

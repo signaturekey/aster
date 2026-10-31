@@ -1,3 +1,4 @@
+import { getMessages } from "@api/modules/conversations/service";
 import { expect, test } from "bun:test";
 import { isConversationEvent } from "@api/events";
 import { errorBody, ProductError } from "@api/lib/errors";
@@ -808,5 +809,38 @@ test("product HTTP boundaries reject unsafe profile and project strings", async 
         })
       ).status,
     ).toBe(422);
+  }
+});
+
+test("project chat authorization shares locks while membership mutations wait", async () => {
+  const [owner, member] = await Promise.all([register(), register()]);
+  const p = await project(owner.id, member.id);
+  const id = p.conversation.id;
+  const acquired = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const instrumented = observeQueries(db, {
+    async after(query) {
+      if (
+        query.sql.includes('from "projects"') &&
+        query.sql.endsWith("for share")
+      ) {
+        acquired.resolve();
+        await release.promise;
+      }
+    },
+  });
+  const first = getMessages(instrumented, owner.id, id, {});
+  try {
+    await acquired.promise;
+    // This must finish while the first authorization still holds its row lock.
+    expect((await getMessages(db, member.id, id, {})).items).toEqual([]);
+    const writes = await Promise.all([
+      send(id, member.cookie, "shared authorization", "shared-retry"),
+      send(id, member.cookie, "shared authorization", "shared-retry"),
+    ]);
+    expect(await writes[0]!.json()).toEqual(await writes[1]!.json());
+  } finally {
+    release.resolve();
+    await first;
   }
 });
