@@ -1033,3 +1033,57 @@ test("committed HTTP send completes while recipient session authorization is blo
     await finished.promise;
   }
 });
+
+test("reconnecting cannot accumulate detached blocked SSE transactions", async () => {
+  const [a, b] = await Promise.all([register(), register()]);
+  const conversation = await direct(a.id, b.id);
+  const session = await db
+    .selectFrom("sessions")
+    .select("id")
+    .where("user_id", "=", b.id)
+    .executeTakeFirstOrThrow();
+  const release = Promise.withResolvers<void>();
+  const entered = Array.from({ length: 8 }, () =>
+    Promise.withResolvers<void>(),
+  );
+  let sessionQueries = 0;
+  const streams = createConversationStreams(
+    observeQueries(db, {
+      async after(query) {
+        if (query.sql.includes('from "sessions"')) {
+          const index = sessionQueries++;
+          entered[index]?.resolve();
+          await release.promise;
+        }
+      },
+    }),
+  );
+  const abort = new AbortController();
+  const completions: Promise<void>[] = [];
+  try {
+    for (let replacement = 0; replacement < 40; replacement++) {
+      const reader = streams
+        .connect(b.id, session.id, abort.signal)
+        .body!.getReader();
+      await reader.read();
+      const completion = streams.publish({
+        type: "message.created",
+        conversationId: conversation.id,
+        messageId: `replacement-${replacement}`,
+      });
+      completions.push(completion);
+      if (replacement < entered.length) await entered[replacement]!.promise;
+      else {
+        await completion;
+        expect((await reader.read()).done).toBe(true);
+      }
+    }
+    expect(sessionQueries).toBe(8);
+  } finally {
+    abort.abort();
+    release.resolve();
+    await Promise.all(completions);
+    streams.close();
+  }
+  expect(sessionQueries).toBe(8);
+});

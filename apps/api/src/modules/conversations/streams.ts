@@ -5,6 +5,8 @@ import { logUnexpectedError } from "@api/lib/diagnostics";
 import { requireConversationMember } from "@api/modules/conversations/service";
 
 const MAX_QUEUED_EVENTS = 32;
+// Leave capacity in the default ten-connection pool for HTTP and recipient lookup.
+const MAX_ACTIVE_DELIVERIES = 8;
 const HEARTBEAT_MS = 15_000;
 const encoder = new TextEncoder();
 
@@ -24,6 +26,7 @@ export function createConversationStreams(db: SqlDatabase) {
   const publications: PendingEvent[] = [];
   let selecting = false;
   let stopped = false;
+  let activeDeliveries = 0;
 
   async function deliver(
     userId: string,
@@ -31,6 +34,14 @@ export function createConversationStreams(db: SqlDatabase) {
     event?: ConversationEvent,
   ) {
     if (!connection.active()) return;
+    // Disconnected SQL can still be waiting on a row lock. Count it until its
+    // transaction settles so reconnects cannot accumulate detached pool waiters.
+    // No waiting semaphore: overload closes the stream for HTTP history recovery.
+    if (activeDeliveries >= MAX_ACTIVE_DELIVERIES) {
+      connection.close();
+      return;
+    }
+    activeDeliveries++;
     try {
       await db.transaction().execute(async (tx) => {
         // Pool acquisition and row locks may wait past disconnect. Never start
@@ -86,6 +97,8 @@ export function createConversationStreams(db: SqlDatabase) {
         });
         connection.close();
       }
+    } finally {
+      activeDeliveries--;
     }
   }
 
