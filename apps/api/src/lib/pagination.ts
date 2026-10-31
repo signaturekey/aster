@@ -12,6 +12,11 @@ export function encodeCursor(row: { id: string; createdAt: Date }) {
   ).toString("base64url");
 }
 
+// PostgreSQL timestamps start at Julian day zero (4714-11-24 BC, or -4713
+// in ISO astronomical years). JS accepts older dates that pg cannot bind.
+// Its maximum valid Date is below PostgreSQL's upper timestamp bound.
+const MIN_POSTGRES_TIMESTAMP = Date.parse("-004713-11-24T00:00:00.000Z");
+
 export function decodeCursor(value: string | undefined) {
   if (value === undefined) return undefined;
   try {
@@ -33,6 +38,7 @@ export function decodeCursor(value: string | undefined) {
     const createdAt = new Date(time);
     if (
       !Number.isFinite(createdAt.getTime()) ||
+      createdAt.getTime() < MIN_POSTGRES_TIMESTAMP ||
       createdAt.toISOString() !== time
     )
       throw new Error();

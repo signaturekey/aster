@@ -56,3 +56,23 @@ test("shared page options reject limits before service queries", async () => {
     nextCursor: null,
   });
 });
+
+test("cursor dates stay within the PostgreSQL and JavaScript timestamp intersection", () => {
+  for (const time of [
+    "-005000-01-01T00:00:00.000Z",
+    "-004713-11-23T23:59:59.999Z",
+    "-271821-04-20T00:00:00.000Z",
+  ]) {
+    const cursor = encodeCursor({ id: "boundary", createdAt: new Date(time) });
+    expect(() => decodeCursor(cursor)).toThrow("Cursor is invalid");
+  }
+  for (const time of [
+    "-004713-11-24T00:00:00.000Z",
+    "0000-01-01T00:00:00.000Z",
+    "+010000-01-01T00:00:00.000Z",
+    "+275760-09-13T00:00:00.000Z",
+  ]) {
+    const row = { id: "boundary", createdAt: new Date(time) };
+    expect(decodeCursor(encodeCursor(row))).toEqual(row);
+  }
+});
