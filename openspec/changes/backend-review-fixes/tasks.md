@@ -12,13 +12,13 @@
 
 ## 3. Membership query costs
 
-- [ ] 3.1 Add user-leading membership indexes in an additive migration; verify upgrade, rerun and catalog tests.
-- [ ] 3.2 Load only locked authorization state outside public project updates; verify query observations and existing project behavior tests.
+- [x] 3.1 Add user-leading membership indexes in an additive migration; verify upgrade, rerun and catalog tests.
+- [x] 3.2 Load only locked authorization state outside public project updates; verify query observations and existing project behavior tests.
 
 ## 4. Integrated verification
 
-- [ ] 4.1 Pass root check, typecheck, unit, isolated PostgreSQL integration and API/client build commands; record exact results.
-- [ ] 4.2 Verify Docker build and isolated local startup/migrations, authenticated operation, persistent restart and graceful shutdown; record evidence without changing working services.
+- [x] 4.1 Pass root check, typecheck, unit, isolated PostgreSQL integration and API/client build commands; record exact results.
+- [x] 4.2 Verify Docker build and isolated local startup/migrations, authenticated operation, persistent restart and graceful shutdown; record evidence without changing working services.
 - [ ] 4.3 Verify GitHub Actions for the latest pushed commit after separate push approval; until then report hosted verification blocked.
 
 ## Execution history

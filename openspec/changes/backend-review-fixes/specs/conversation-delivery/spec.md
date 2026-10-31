@@ -13,6 +13,11 @@ The API SHALL bound queued notification and authorization work, coalesce pending
 - **WHEN** authorization is blocked while events and heartbeats arrive
 - **THEN** pending work remains bounded and disconnect prevents further queued authorization or delivery
 
+#### Scenario: Replacing blocked connections
+
+- **WHEN** repeated reconnects replace streams whose authorization is still blocked
+- **THEN** globally active delivery work remains bounded, including the disconnected streams' unfinished work
+
 ### Requirement: Independent message acknowledgement
 
 A committed message write SHALL return its HTTP result without waiting for notification recipients. Delivery SHALL still recheck current session validity and membership under locks that coordinate revocation before enqueue.
