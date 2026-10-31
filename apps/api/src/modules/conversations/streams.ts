@@ -210,7 +210,7 @@ export function createConversationStreams(db: SqlDatabase) {
             const connection = current.get(userId);
             return connection?.active()
               ? connection.schedule(publication.event)
-              : undefined;
+              : Promise.resolve();
           });
           void Promise.all(deliveries).then(publication.done);
         } catch (error) {
