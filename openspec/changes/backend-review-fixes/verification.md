@@ -44,6 +44,21 @@ An initial test import used a schema package not directly installed; corrected t
 
 The temporary interaction driver and local-only test account state were kept outside the repository under `/tmp`, not committed. This was actual local lifecycle verification, not a new smoke/E2E suite.
 
+## Codex cursor follow-up — 2026-10-31
+
+The user approved fixing the remaining Codex finding in the same worktree. Codex reviewed main `c21b9a9`; three other findings were already covered by the fixes above. Independently reproduced the new issue: canonical `-005000-01-01T00:00:00.000Z` decoded successfully but an actual pg parameter cast failed with SQLSTATE 22008.
+
+Commit `53ba29b` rejects dates before PostgreSQL's Julian-day-zero lower bound in the shared cursor decoder. It preserves valid expanded ISO dates; finite JavaScript dates already fit under PostgreSQL's upper timestamp bound. Added exact-boundary/one-millisecond-before unit checks and PostgreSQL HTTP regressions across conversations, matches, projects and applications.
+
+Latest checks all passed:
+
+- `bun run check`, `bun run typecheck`.
+- `bun run test:unit`: 36 passed, 0 failed; 249 assertions.
+- Isolated `bun run test:integration` with the explicit disposable `aster_test` URL: 97 passed, 0 failed; 1,597 assertions across 15 files. No working database mutation or reset.
+- `bun run build`: API and browser-safe client passed.
+- Rebuilt and started only Compose project `aster-backend-review` on ports 3011/55443. Actual authenticated HTTP returned `422 INVALID_CURSOR` for the reported date and one millisecond before the lower bound; returned 200 at the lower bound and JavaScript's maximum date.
+- Verified the prior persisted project/message still survived this rebuilt startup; opened SSE and stopped API gracefully, obtaining EOF and exit code 0/OOMKilled false. Stopped the isolated database; no volumes deleted.
+
 ## Remaining completion boundary
 
 GitHub Actions for the latest commit is **not verified**: the user requested local fixes and commits, not publication. Task 4.3 remains open pending separate push approval and an actual successful hosted run. Local checks are not represented as hosted CI success. The change remains active, not archived; canonical requirements are not claimed synced before final review.

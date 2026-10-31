@@ -21,6 +21,11 @@
 - [x] 4.2 Verify Docker build and isolated local startup/migrations, authenticated operation, persistent restart and graceful shutdown; record evidence without changing working services.
 - [ ] 4.3 Verify GitHub Actions for the latest pushed commit after separate push approval; until then report hosted verification blocked.
 
+## 5. Codex cursor follow-up
+
+- [x] 5.1 Reject cursor dates outside the PostgreSQL timestamp range before queries; verify boundary unit tests, HTTP PostgreSQL 422 regressions and workspace checks/builds.
+
 ## Execution history
 
 - 2026-10-31: User approved reviewing and fixing peer findings in a separate worktree with small commits. Peer supplied six findings; implementation and tests must independently verify them. No push authorized.
+- 2026-10-31: User approved the remaining Codex cursor-range finding in the same worktree. Implemented in `53ba29b`; all local checks and actual container HTTP boundary verification passed. Hosted CI still awaits push approval.

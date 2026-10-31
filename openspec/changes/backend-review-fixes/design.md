@@ -16,6 +16,8 @@ Preserve exact valid text, idempotency, current-state authorization and public i
 - Use project FOR SHARE for chat authorization, conflicting with exclusive membership mutations but compatible with other readers. Lock conversation FOR UPDATE separately only for sends to serialize request-id checks/inserts. Direct membership is immutable and needs no authorization lock; direct sends take only the exclusive conversation write lock, avoiding shared-to-exclusive conversion deadlocks.
 - Add user-leading membership indexes in a new ordered migration, never edit an applied baseline. Separate locked project authorization state from full hydration for public updates.
 
+- Reject cursor dates before PostgreSQL's Julian-day-zero boundary (`-004713-11-24T00:00:00.000Z`, astronomical year numbering) in the shared decoder. JavaScript's maximum valid date precedes PostgreSQL's upper bound, so the existing finite-date check covers the upper side. Preserve valid extended ISO dates rather than imposing an unrelated four-digit-year product limit. Verify actual `pg` binding and HTTP errors against the disposable database.
+
 ## Risks / Trade-offs
 
 - Lossy notifications under overload → close affected streams and recover through HTTP history; no durability promise.

@@ -7,6 +7,7 @@ The 2026-10-31 backend review identified six issues affecting text fidelity, bou
 ## What Changes
 
 - Reject product request strings that PostgreSQL cannot preserve exactly.
+- Reject cursor dates outside PostgreSQL's timestamp range with `422 INVALID_CURSOR` before querying (approved Codex follow-up).
 - Bound pending SSE work, coalesce heartbeats, stop disconnected work and acknowledge committed HTTP writes without awaiting notification fan-out.
 - Use shared authorization locks while preserving exclusive message idempotency and membership revocation ordering.
 - Add user-leading membership indexes through an additive migration.
