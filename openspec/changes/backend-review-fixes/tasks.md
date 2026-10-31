@@ -7,7 +7,7 @@
 ## 2. Conversation authorization and delivery
 
 - [x] 2.1 Use compatible shared authorization locks with separate send serialization; verify PostgreSQL concurrent authorization, revocation and idempotency tests.
-- [ ] 2.2 Bound pending SSE work, coalesce heartbeats and discard disconnected work; verify deterministic blocked-query and overload tests.
+- [x] 2.2 Bound pending SSE work, coalesce heartbeats and discard disconnected work; verify deterministic blocked-query and overload tests.
 - [ ] 2.3 Return committed HTTP sends without awaiting fan-out; verify blocked-recipient HTTP regression and existing SSE tests.
 
 ## 3. Membership query costs

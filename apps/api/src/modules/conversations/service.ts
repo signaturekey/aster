@@ -8,12 +8,14 @@ export async function requireConversationMember(
   tx: SqlTransaction,
   userId: string,
   conversationId: string,
+  active: () => boolean = () => true,
 ) {
   const source = await tx
     .selectFrom("conversations")
     .select("project_id")
     .where("id", "=", conversationId)
     .executeTakeFirst();
+  if (!active()) return;
   const notFound = () =>
     new ProductError(404, "NOT_FOUND", "Conversation not found");
   if (!source) throw notFound();
@@ -26,6 +28,7 @@ export async function requireConversationMember(
       .where("id", "=", source.project_id)
       .forShare()
       .executeTakeFirst();
+    if (!active()) return;
     if (!project) throw notFound();
   }
   // Direct membership is immutable: unlike a project roster it has no revoke

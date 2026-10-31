@@ -1,5 +1,5 @@
 import { getMessages } from "@api/modules/conversations/service";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { isConversationEvent } from "@api/events";
 import { errorBody, ProductError } from "@api/lib/errors";
 import { conversationRoutes } from "@api/modules/conversations/routes";
@@ -841,6 +841,127 @@ test("project chat authorization shares locks while membership mutations wait", 
     expect(await writes[0]!.json()).toEqual(await writes[1]!.json());
   } finally {
     release.resolve();
+    await first;
+  }
+});
+
+test("pending SSE delivery is bounded per connection and disconnect discards queued SQL", async () => {
+  const [a, b] = await Promise.all([register(), register()]);
+  const conversation = await direct(a.id, b.id);
+  const sessions = await db
+    .selectFrom("sessions")
+    .select(["id", "user_id"])
+    .where("user_id", "in", [a.id, b.id])
+    .execute();
+  const aSession = sessions.find((row) => row.user_id === a.id)!;
+  const bSession = sessions.find((row) => row.user_id === b.id)!;
+  const blocked = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let slowQueries = 0;
+  const instrumented = observeQueries(db, {
+    async after(query) {
+      if (
+        query.sql.includes('from "sessions"') &&
+        query.parameters[0] === bSession.id
+      ) {
+        slowQueries++;
+        if (query.sql.endsWith("for share")) {
+          blocked.resolve();
+          await release.promise;
+        }
+      }
+    },
+  });
+  const streams = createConversationStreams(instrumented);
+  const abort = new AbortController();
+  const intervals = spyOn(globalThis, "setInterval");
+  const fast = streams
+    .connect(a.id, aSession.id, abort.signal)
+    .body!.getReader();
+  const slow = streams
+    .connect(b.id, bSession.id, abort.signal)
+    .body!.getReader();
+  const heartbeat = intervals.mock.calls.at(-1)?.[0] as () => void;
+  intervals.mockRestore();
+  await fast.read();
+  await slow.read();
+  const completions: Promise<void>[] = [];
+  try {
+    for (let i = 0; i < 35; i++) {
+      const messageId = `pending-${i}`;
+      completions.push(
+        streams.publish({
+          type: "message.created",
+          conversationId: conversation.id,
+          messageId,
+        }),
+      );
+      // Fast delivery proves recipient scheduling completed without relying on
+      // timing sleeps, even though the other connection remains blocked in SQL.
+      expect((await nextEvent(fast)).messageId).toBe(messageId);
+      if (i === 0) {
+        await blocked.promise;
+        for (let tick = 0; tick < 100; tick++) heartbeat();
+      }
+    }
+    expect((await slow.read()).done).toBe(true);
+    expect(slowQueries).toBe(1);
+  } finally {
+    abort.abort();
+    release.resolve();
+    await Promise.all(completions);
+    streams.close();
+  }
+  // Releasing an already-started lock must not start another session or member
+  // query after disconnect, let alone drain the queued events.
+  expect(slowQueries).toBe(1);
+});
+
+test("blocked recipient selection has bounded ingress and skips disconnected recipients", async () => {
+  const user = await register();
+  const session = await db
+    .selectFrom("sessions")
+    .select("id")
+    .where("user_id", "=", user.id)
+    .executeTakeFirstOrThrow();
+  const blocked = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let selections = 0;
+  let transactions = 0;
+  const instrumented = observeQueries(db, {
+    async before(query) {
+      if (isRecipientSelection(query)) {
+        selections++;
+        blocked.resolve();
+        await release.promise;
+      }
+      if (query.sql === "begin") transactions++;
+    },
+  });
+  const streams = createConversationStreams(instrumented);
+  const abort = new AbortController();
+  const reader = streams
+    .connect(user.id, session.id, abort.signal)
+    .body!.getReader();
+  await reader.read();
+  const event = {
+    type: "message.created" as const,
+    conversationId: "missing",
+    messageId: "missing",
+  };
+  const first = streams.publish(event);
+  try {
+    await blocked.promise;
+    const queued = Array.from({ length: 40 }, () => streams.publish(event));
+    expect((await reader.read()).done).toBe(true);
+    expect(selections).toBe(1);
+    release.resolve();
+    await Promise.all([first, ...queued]);
+    expect(transactions).toBe(0);
+  } finally {
+    release.resolve();
+    abort.abort();
+    streams.close();
     await first;
   }
 });
