@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { createSqlDatabase } from "@api/db/kysely";
-import { migrateDatabase } from "@api/db/migrate";
+import { migrateDatabase, migrations } from "@api/db/migrate";
 import { sql } from "kysely";
 
 const url = process.env.DATABASE_URL;
@@ -27,8 +27,11 @@ test("Kysely initializes the fresh schema once and serializes migration runners"
   expect(await migrateDatabase(db)).toEqual([]);
   const history = await sql<{
     name: string;
-  }>`select name from kysely_migration`.execute(db);
-  expect(history.rows.map((row) => row.name)).toEqual(["001_initial"]);
+  }>`select name from kysely_migration order by name`.execute(db);
+  expect(history.rows.map((row) => row.name)).toEqual([
+    "001_initial",
+    "002_membership_user_indexes",
+  ]);
   const tables = await sql<{
     count: number;
   }>`select count(*)::int as count from information_schema.tables where table_schema = ${schema}`.execute(
@@ -98,8 +101,8 @@ test("a failed migration rolls back DDL and does not record successful history",
   const bad = migrateDatabase(db, {
     async getMigrations() {
       return {
-        "001_initial": { async up() {} },
-        "002_failure": {
+        ...(await migrations.getMigrations()),
+        "003_failure": {
           async up(tx) {
             await sql`create table should_rollback (id text)`.execute(tx);
             throw new Error("Injected failure");
@@ -118,8 +121,11 @@ test("a failed migration rolls back DDL and does not record successful history",
   expect(row.rows[0]?.exists).toBe(false);
   const history = await sql<{
     name: string;
-  }>`select name from kysely_migration`.execute(db);
-  expect(history.rows.map((item) => item.name)).toEqual(["001_initial"]);
+  }>`select name from kysely_migration order by name`.execute(db);
+  expect(history.rows.map((item) => item.name)).toEqual([
+    "001_initial",
+    "002_membership_user_indexes",
+  ]);
 });
 
 test("dictionary seeding is repeatable and creates no demo product data", async () => {

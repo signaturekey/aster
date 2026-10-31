@@ -436,6 +436,9 @@ test("mail/recovery/cache stay disabled and auth does not generate a second sche
   expect(await migrateDatabase(db)).toEqual([]);
   const history = await sql<{
     name: string;
-  }>`select name from kysely_migration`.execute(db);
-  expect(history.rows).toEqual([{ name: "001_initial" }]);
+  }>`select name from kysely_migration order by name`.execute(db);
+  expect(history.rows).toEqual([
+    { name: "001_initial" },
+    { name: "002_membership_user_indexes" },
+  ]);
 });
