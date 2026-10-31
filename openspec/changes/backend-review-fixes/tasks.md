@@ -1,0 +1,26 @@
+# Tasks
+
+## 1. Text fidelity
+
+- [ ] 1.1 Reject unsafe persisted product strings; verify schema/unit and HTTP PostgreSQL regressions including exact valid Unicode retries.
+
+## 2. Conversation authorization and delivery
+
+- [ ] 2.1 Use compatible shared authorization locks with separate send serialization; verify PostgreSQL concurrent authorization, revocation and idempotency tests.
+- [ ] 2.2 Bound pending SSE work, coalesce heartbeats and discard disconnected work; verify deterministic blocked-query and overload tests.
+- [ ] 2.3 Return committed HTTP sends without awaiting fan-out; verify blocked-recipient HTTP regression and existing SSE tests.
+
+## 3. Membership query costs
+
+- [ ] 3.1 Add user-leading membership indexes in an additive migration; verify upgrade, rerun and catalog tests.
+- [ ] 3.2 Load only locked authorization state outside public project updates; verify query observations and existing project behavior tests.
+
+## 4. Integrated verification
+
+- [ ] 4.1 Pass root check, typecheck, unit, isolated PostgreSQL integration and API/client build commands; record exact results.
+- [ ] 4.2 Verify Docker build and isolated local startup/migrations, authenticated operation, persistent restart and graceful shutdown; record evidence without changing working services.
+- [ ] 4.3 Verify GitHub Actions for the latest pushed commit after separate push approval; until then report hosted verification blocked.
+
+## Execution history
+
+- 2026-10-31: User approved reviewing and fixing peer findings in a separate worktree with small commits. Peer supplied six findings; implementation and tests must independently verify them. No push authorized.

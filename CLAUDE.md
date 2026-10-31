@@ -4,7 +4,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## OpenSpec workflow
 
-**Current change:** none. Confirm with `openspec list --json` before starting work.
+**Current change:** `backend-review-fixes` (isolated backend review worktree). Confirm with `openspec list --json` before starting work.
 
 - `openspec/specs/` contains canonical requirements for implemented product and system behavior. Read the relevant capability specs before changing that behavior.
 - `openspec/changes/<change-name>/` contains active proposals, designs, delta specs and task checklists. Read the selected change's artifacts before implementation; use `openspec status --change <change-name>` to inspect its state.
