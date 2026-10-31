@@ -965,3 +965,71 @@ test("blocked recipient selection has bounded ingress and skips disconnected rec
     await first;
   }
 });
+
+test("committed HTTP send completes while recipient session authorization is blocked", async () => {
+  const [a, b] = await Promise.all([register(), register()]);
+  const conversation = await direct(a.id, b.id);
+  const session = await db
+    .selectFrom("sessions")
+    .select("id")
+    .where("user_id", "=", b.id)
+    .executeTakeFirstOrThrow();
+  const blocked = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const finished = Promise.withResolvers<void>();
+  const streams = createConversationStreams(
+    observeQueries(db, {
+      async after(query) {
+        if (
+          query.sql.includes('from "sessions"') &&
+          query.sql.endsWith("for share")
+        ) {
+          blocked.resolve();
+          await release.promise;
+        }
+        if (query.sql === "commit") finished.resolve();
+      },
+    }),
+  );
+  const abort = new AbortController();
+  const reader = streams
+    .connect(b.id, session.id, abort.signal)
+    .body!.getReader();
+  await reader.read();
+  const isolated = new Elysia({ normalize: false }).group("/api/v1", (app) =>
+    app.use(conversationRoutes(db, auth, [origin], streams)),
+  );
+  const response = isolated.handle(
+    new Request(`${origin}/api/v1${messages(conversation.id)}`, {
+      method: "POST",
+      headers: { origin, cookie: a.cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        text: "ack without SSE",
+        requestId: "blocked-recipient",
+      }),
+    }),
+  );
+  try {
+    await blocked.promise;
+    // No release until after acknowledgement: the old await-publish handler
+    // cannot satisfy this assertion while recipient SQL remains paused.
+    const result = await response;
+    expect(result.status).toBe(200);
+    const message = await result.json();
+    expect(
+      await db
+        .selectFrom("messages")
+        .select("id")
+        .where("id", "=", message.id)
+        .executeTakeFirst(),
+    ).toBeDefined();
+    release.resolve();
+    expect((await nextEvent(reader)).messageId).toBe(message.id);
+  } finally {
+    release.resolve();
+    abort.abort();
+    streams.close();
+    await response;
+    await finished.promise;
+  }
+});

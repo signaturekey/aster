@@ -55,8 +55,10 @@ export function conversationRoutes(
           params.conversationId,
           body,
         );
+        // The message is durable now. Slow SSE authorization must not delay its
+        // HTTP acknowledgement; bounded delivery remains best-effort background work.
         if (result.created)
-          await streams.publish({
+          void streams.publish({
             type: "message.created",
             conversationId: result.message.conversationId,
             messageId: result.message.id,
