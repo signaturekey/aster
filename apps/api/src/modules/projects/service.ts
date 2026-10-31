@@ -11,7 +11,6 @@ import {
   publicProfile,
   requireCompleteProfile,
 } from "@api/modules/profiles/service";
-import { lockProjectRow } from "@api/modules/projects/coordination";
 import type {
   PageQuery,
   ProjectCreate,
@@ -85,7 +84,10 @@ export function publicProject(row: ProjectRow): PublicProject {
 export const projectNotFound = () =>
   new ProductError(404, "PROJECT_NOT_FOUND", "Project not found.");
 
-async function projectRow(db: SqlConnection, id: string): Promise<ProjectRow> {
+export async function projectRow(
+  db: SqlConnection,
+  id: string,
+): Promise<ProjectRow> {
   const row = await projectQuery(db).where("id", "=", id).executeTakeFirst();
   if (!row) throw projectNotFound();
   const [hydrated] = await hydrateProjects(db, [row]);
@@ -94,8 +96,20 @@ async function projectRow(db: SqlConnection, id: string): Promise<ProjectRow> {
 }
 
 export async function lockProject(tx: SqlTransaction, id: string) {
-  if (!(await lockProjectRow(tx, id))) throw projectNotFound();
-  return projectRow(tx, id);
+  // Application and membership mutations need current authorization state, not
+  // public fields or skills. Keep their exclusive lock without full hydration.
+  const project = await tx
+    .selectFrom("projects")
+    .select([
+      "id",
+      "owner_id as ownerId",
+      "recruitment_open as recruitmentOpen",
+    ])
+    .where("id", "=", id)
+    .forUpdate()
+    .executeTakeFirst();
+  if (!project) throw projectNotFound();
+  return project;
 }
 
 export function requireOwner(ownerId: string, actorId: string) {
@@ -202,8 +216,11 @@ export async function updateProject(
   input: ProjectPatch,
 ) {
   return db.transaction().execute(async (tx) => {
-    const project = await lockProject(tx, projectId);
-    requireOwner(project.ownerId, actorId);
+    const authorization = await lockProject(tx, projectId);
+    requireOwner(authorization.ownerId, actorId);
+    // Full state is needed only for PATCH comparisons and the public response;
+    // retain it after authorization so no-op updates preserve their timestamp.
+    const project = await projectRow(tx, projectId);
     await validateDictionaries(tx, input);
     const skillIds =
       input.requiredSkillIds && [...input.requiredSkillIds].sort();

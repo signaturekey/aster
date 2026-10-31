@@ -3,6 +3,7 @@ import { ProductError } from "@api/lib/errors";
 import { removeProjectConversationMember } from "@api/modules/conversations/membership";
 import {
   lockProject,
+  projectRow,
   publicProject,
   requireOwner,
 } from "@api/modules/projects/service";
@@ -70,17 +71,14 @@ export async function transferOwnership(
         "MEMBER_REQUIRED",
         "The new owner must already be a member.",
       );
-    if (project.ownerId === userId) return publicProject(project);
-    const updated = await tx
-      .updateTable("projects")
-      .set({ owner_id: userId, updated_at: sql<Date>`clock_timestamp()` })
-      .where("id", "=", projectId)
-      .returning("updated_at")
-      .executeTakeFirstOrThrow();
-    return publicProject({
-      ...project,
-      ownerId: userId,
-      updatedAt: updated.updated_at,
-    });
+    if (project.ownerId !== userId)
+      await tx
+        .updateTable("projects")
+        .set({ owner_id: userId, updated_at: sql<Date>`clock_timestamp()` })
+        .where("id", "=", projectId)
+        .executeTakeFirstOrThrow();
+    // Transfers return the public project, unlike removal/application actions.
+    // Hydrate only after authorization and leave self-transfers write-free.
+    return publicProject(await projectRow(tx, projectId));
   });
 }

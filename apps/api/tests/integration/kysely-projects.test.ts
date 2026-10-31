@@ -24,7 +24,14 @@ import {
   projectSchema,
 } from "@api/modules/projects/schemas";
 import { TypeCompiler } from "elysia/type-system";
-import { sql, type KyselyPlugin, type RootOperationNode } from "kysely";
+import {
+  AliasNode,
+  ReferenceNode,
+  TableNode,
+  sql,
+  type KyselyPlugin,
+  type RootOperationNode,
+} from "kysely";
 
 const url = process.env.DATABASE_URL;
 if (
@@ -527,6 +534,69 @@ test("Kysely recruitment closure and acceptance serialize in both lock orders", 
   }
 });
 
+test("project authorization-only operations lock minimal state without project hydration", async () => {
+  const owner = await user();
+  const applicant = await user();
+  const project = await createProject(db, owner, input);
+  const queries: RootOperationNode[] = [];
+  const observed = db.withPlugin(observe((node) => queries.push(node)));
+  const application = await submitApplication(
+    observed,
+    applicant,
+    project.id,
+    "Join",
+  );
+  expect(
+    (await listApplications(observed, owner, {}, project.id)).items,
+  ).toEqual([application]);
+  await transitionApplication(observed, owner, application.id, "accepted");
+  await transitionApplication(observed, owner, application.id, "accepted");
+  await removeMember(observed, owner, project.id, applicant);
+  const next = await submitApplication(
+    observed,
+    applicant,
+    project.id,
+    "Again",
+  );
+  await transitionApplication(observed, applicant, next.id, "withdrawn");
+  const last = await submitApplication(observed, applicant, project.id, "Last");
+  await transitionApplication(observed, owner, last.id, "rejected");
+  await expectError(
+    transferOwnership(observed, applicant, project.id, owner),
+    403,
+    "OWNER_REQUIRED",
+  );
+  await expectError(
+    updateProject(observed, applicant, project.id, {}),
+    403,
+    "OWNER_REQUIRED",
+  );
+  const projectReads = queries.filter(
+    (node) =>
+      node.kind === "SelectQueryNode" &&
+      node.from?.froms.some(
+        (source) =>
+          TableNode.is(source) && source.table.identifier.name === "projects",
+      ),
+  );
+  expect(projectReads).toHaveLength(11);
+  for (const node of projectReads) {
+    expect(isLock(node)).toBe(true);
+    if (node.kind !== "SelectQueryNode") throw new Error("Expected SELECT");
+    expect(
+      node.selections?.map((selection) => {
+        const selected = selection.selection;
+        const reference = AliasNode.is(selected) ? selected.node : selected;
+        return ReferenceNode.is(reference) &&
+          reference.column.kind === "ColumnNode"
+          ? reference.column.column.name
+          : null;
+      }),
+    ).toEqual(["id", "owner_id", "recruitment_open"]);
+  }
+  expect(JSON.stringify(queries)).not.toContain('"name":"project_skills"');
+});
+
 test("Kysely transfers authorize current owners and accepted retries never restore departed members", async () => {
   const { owner, applicant, project, application } = await fixture();
   await transitionApplication(db, owner, application.id, "accepted");
@@ -557,7 +627,14 @@ test("Kysely transfers authorize current owners and accepted retries never resto
   expect(transfers.filter(({ status }) => status === "fulfilled")).toHaveLength(
     1,
   );
-  const currentOwner = (await getProject(db, project.id)).ownerId;
+  const currentProject = await getProject(db, project.id);
+  const transferred = transfers.find(({ status }) => status === "fulfilled");
+  if (transferred?.status !== "fulfilled") throw new Error("Expected transfer");
+  expect(transferred.value).toEqual(currentProject);
+  expect(TypeCompiler.Compile(projectSchema).Check(transferred.value)).toBe(
+    true,
+  );
+  const currentOwner = currentProject.ownerId;
   const departed = currentOwner === applicant ? successor : applicant;
   const decidedId =
     departed === applicant ? application.id : successorApplication.id;
