@@ -85,6 +85,11 @@ test("membership indexes upgrade a populated baseline once without changing rows
       direction: "Up",
       status: "Success",
     },
+    {
+      migrationName: "003_dev_seed",
+      direction: "Up",
+      status: "Success",
+    },
   ]);
   expect(await migrateDatabase(db)).toEqual([]);
   expect(await db.selectFrom("projects").selectAll().execute()).toEqual(
@@ -116,5 +121,9 @@ test("membership indexes upgrade a populated baseline once without changing rows
   expect(
     (await sql`select name from kysely_migration order by name`.execute(db))
       .rows,
-  ).toEqual([{ name: "001_initial" }, { name: "002_membership_user_indexes" }]);
+  ).toEqual([
+    { name: "001_initial" },
+    { name: "002_membership_user_indexes" },
+    { name: "003_dev_seed" },
+  ]);
 });

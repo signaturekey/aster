@@ -440,5 +440,6 @@ test("mail/recovery/cache stay disabled and auth does not generate a second sche
   expect(history.rows).toEqual([
     { name: "001_initial" },
     { name: "002_membership_user_indexes" },
+    { name: "003_dev_seed" },
   ]);
 });

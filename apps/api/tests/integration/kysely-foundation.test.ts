@@ -31,13 +31,14 @@ test("Kysely initializes the fresh schema once and serializes migration runners"
   expect(history.rows.map((row) => row.name)).toEqual([
     "001_initial",
     "002_membership_user_indexes",
+    "003_dev_seed",
   ]);
   const tables = await sql<{
     count: number;
   }>`select count(*)::int as count from information_schema.tables where table_schema = ${schema}`.execute(
     db,
   );
-  expect(tables.rows[0]?.count).toBe(22);
+  expect(tables.rows[0]?.count).toBe(23);
 });
 
 test("SQL defaults and deferred owner membership work without ORM generation", async () => {
@@ -125,6 +126,7 @@ test("a failed migration rolls back DDL and does not record successful history",
   expect(history.rows.map((item) => item.name)).toEqual([
     "001_initial",
     "002_membership_user_indexes",
+    "003_dev_seed",
   ]);
 });
 

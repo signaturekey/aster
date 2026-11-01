@@ -177,7 +177,15 @@ export interface MessageTable {
   created_at: DefaultTimestamp;
 }
 
+export interface DevSeedMarkerTable {
+  version: string;
+  group_key: string;
+  record_id: string | null;
+  created_at: DefaultTimestamp;
+}
+
 export interface DB {
+  dev_seed_markers: DevSeedMarkerTable;
   specializations: SpecializationTable;
   skills: SkillTable;
   experience_levels: ExperienceLevelTable;

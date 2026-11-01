@@ -26,6 +26,15 @@ export const migrations: MigrationProvider = {
           await sql.raw(baseline).execute(db);
         },
       },
+      "003_dev_seed": {
+        async up(db) {
+          const markers = await readFile(
+            new URL("./migrations/003_dev_seed.sql", import.meta.url),
+            "utf8",
+          );
+          await sql.raw(markers).execute(db);
+        },
+      },
       "002_membership_user_indexes": {
         async up(db) {
           const indexes = await readFile(
