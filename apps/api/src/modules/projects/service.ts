@@ -13,6 +13,7 @@ import {
 } from "@api/modules/profiles/service";
 import type {
   PageQuery,
+  ProjectCatalogueQuery,
   ProjectCreate,
   ProjectPatch,
   PublicMember,
@@ -121,22 +122,27 @@ export function requireOwner(ownerId: string, actorId: string) {
     );
 }
 
-async function validateDictionaries(tx: SqlTransaction, input: ProjectPatch) {
-  const invalid = () =>
-    new ProductError(
-      422,
-      "INVALID_DICTIONARY_VALUE",
-      "Unsupported project dictionary value.",
-    );
+const invalidDictionary = () =>
+  new ProductError(
+    422,
+    "INVALID_DICTIONARY_VALUE",
+    "Unsupported project dictionary value.",
+  );
+
+async function validateGoal(db: SqlConnection, goalId: string | undefined) {
   if (
-    input.goalId !== undefined &&
-    !(await tx
+    goalId !== undefined &&
+    !(await db
       .selectFrom("goals")
       .select("id")
-      .where("id", "=", input.goalId)
+      .where("id", "=", goalId)
       .executeTakeFirst())
   )
-    throw invalid();
+    throw invalidDictionary();
+}
+
+async function validateDictionaries(tx: SqlTransaction, input: ProjectPatch) {
+  await validateGoal(tx, input.goalId);
   if (input.requiredSkillIds !== undefined) {
     const skills = input.requiredSkillIds.length
       ? await tx
@@ -145,7 +151,8 @@ async function validateDictionaries(tx: SqlTransaction, input: ProjectPatch) {
           .where("id", "in", input.requiredSkillIds)
           .execute()
       : [];
-    if (skills.length !== input.requiredSkillIds.length) throw invalid();
+    if (skills.length !== input.requiredSkillIds.length)
+      throw invalidDictionary();
   }
 }
 
@@ -282,7 +289,7 @@ export async function updateProject(
 
 export async function listProjects(
   db: SqlDatabase,
-  query: PageQuery,
+  query: ProjectCatalogueQuery,
   memberId?: string,
 ) {
   const { limit, cursor } = pageOptions(query);
@@ -290,7 +297,22 @@ export async function listProjects(
     .transaction()
     .setIsolationLevel("repeatable read")
     .execute(async (tx) => {
+      await validateGoal(tx, query.goalId);
       let selection = projectQuery(tx);
+      const text = query.q?.trim();
+      if (text) {
+        // Bind the pattern as data and escape LIKE metacharacters separately:
+        // parameterization alone does not make %/_ literal substring characters.
+        const pattern = `%${text.replace(/[\\%_]/g, "\\$&")}%`;
+        selection = selection.where((eb) =>
+          eb.or([
+            eb("title", "ilike", pattern),
+            eb("description", "ilike", pattern),
+          ]),
+        );
+      }
+      if (query.goalId !== undefined)
+        selection = selection.where("goal_id", "=", query.goalId);
       if (memberId)
         selection = selection.where(
           "id",

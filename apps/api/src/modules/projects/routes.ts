@@ -1,5 +1,5 @@
 import type { Database } from "@api/db/client";
-import { errorResponses } from "@api/lib/errors";
+import { errorResponses, ProductError } from "@api/lib/errors";
 import { pageQuerySchema } from "@api/lib/pagination";
 import { identityGuard } from "@api/modules/identity/routes";
 import type { Auth } from "@api/modules/identity/service";
@@ -19,6 +19,7 @@ import {
   applicationSchema,
   memberPageSchema,
   memberParamsSchema,
+  projectCatalogueQuerySchema,
   projectCreateSchema,
   projectPageSchema,
   projectParamsSchema,
@@ -53,10 +54,25 @@ export function projectRoutes(
     normalize: false,
   })
     .use(identityGuard(auth, trustedOrigins))
-    .get("/projects", ({ query }) => listProjects(db, query), {
-      query: pageQuerySchema,
-      response: { 200: projectPageSchema, ...errorResponses },
-    })
+    .get(
+      "/projects",
+      ({ query, request }) => {
+        // Elysia keeps only one value for scalar query fields. Reject repeated
+        // filters explicitly rather than silently accepting an ambiguous goal.
+        const params = new URL(request.url).searchParams;
+        if (params.getAll("q").length > 1 || params.getAll("goalId").length > 1)
+          throw new ProductError(
+            422,
+            "VALIDATION_ERROR",
+            "Supply at most one search text and goal.",
+          );
+        return listProjects(db, query);
+      },
+      {
+        query: projectCatalogueQuerySchema,
+        response: { 200: projectPageSchema, ...errorResponses },
+      },
+    )
     .post("/projects", ({ actor, body }) => createProject(db, actor.id, body), {
       body: projectCreateSchema,
       response: { 200: projectSchema, ...errorResponses },

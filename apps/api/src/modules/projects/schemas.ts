@@ -1,11 +1,19 @@
 import { postgresText } from "@api/lib/strings";
-import type { pageQuerySchema } from "@api/lib/pagination";
+import { pageQuerySchema } from "@api/lib/pagination";
 import { profileSchema } from "@api/modules/profiles/schemas";
 import { t } from "elysia";
 
 const idSchema = postgresText({ minLength: 1, maxLength: 128 });
 const dictionaryIdSchema = postgresText({ minLength: 1, maxLength: 80 });
 const timestampSchema = postgresText({ format: "date-time" });
+// Bound the supplied text before trimming in the service; blank means no search.
+export const projectCatalogueQuerySchema = t.Object({
+  ...pageQuerySchema.properties,
+  q: t.Optional(postgresText({ maxLength: 200 })),
+  goalId: t.Optional(dictionaryIdSchema),
+});
+export type ProjectCatalogueQuery =
+  (typeof projectCatalogueQuerySchema)["static"];
 // Explicit engineering limits: title 120, description 5,000, 1–10 roles
 // of 80 characters, 20 unique skills, and application text 2,000 characters.
 const recruitmentFields = {
