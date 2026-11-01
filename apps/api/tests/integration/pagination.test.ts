@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { decodeCursor, encodeCursor } from "@api/lib/pagination";
+import { encodeConversationCursor } from "@api/modules/conversations/summaries";
 import { sql } from "kysely";
 import { db, register, request } from "./helpers";
 
@@ -20,7 +21,13 @@ test("HTTP pagination rejects dates outside PostgreSQL before page queries", asy
       "/api/v1/me/projects",
       "/api/v1/me/applications",
     ]) {
-      const response = await request(`${path}?cursor=${cursor}`, {
+      const pageCursor = path.endsWith("/conversations")
+        ? encodeConversationCursor({
+            id: "cursor-boundary",
+            lastActivityAt: new Date(time),
+          })
+        : cursor;
+      const response = await request(`${path}?cursor=${pageCursor}`, {
         cookie: user.cookie,
       });
       expect(response.status).toBe(422);
@@ -49,7 +56,13 @@ test("accepted cursor boundaries bind successfully through pg and HTTP page quer
     `.execute(db);
     expect(result.rows[0]?.valid).toBe(true);
     for (const path of ["/api/v1/conversations", "/api/v1/me/projects"]) {
-      const response = await request(`${path}?cursor=${cursor}`, {
+      const pageCursor = path.endsWith("/conversations")
+        ? encodeConversationCursor({
+            id: "cursor-boundary",
+            lastActivityAt: new Date(time),
+          })
+        : cursor;
+      const response = await request(`${path}?cursor=${pageCursor}`, {
         cookie: user.cookie,
       });
       expect(response.status).toBe(200);

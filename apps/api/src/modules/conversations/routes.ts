@@ -4,6 +4,7 @@ import { pageQuerySchema } from "@api/lib/pagination";
 import {
   conversationPageSchema,
   conversationParamsSchema,
+  conversationSummarySchema,
   messagePageSchema,
   messageSchema,
   sendMessageSchema,
@@ -14,6 +15,7 @@ import {
   sendMessage,
 } from "@api/modules/conversations/service";
 import { createConversationStreams } from "@api/modules/conversations/streams";
+import { getConversationSummary } from "@api/modules/conversations/summaries";
 import { identityGuard } from "@api/modules/identity/routes";
 import type { Auth } from "@api/modules/identity/service";
 import { Elysia } from "elysia";
@@ -34,6 +36,15 @@ export function conversationRoutes(
       {
         query: pageQuerySchema,
         response: { 200: conversationPageSchema, ...errorResponses },
+      },
+    )
+    .get(
+      "/conversations/:conversationId",
+      ({ actor, params }) =>
+        getConversationSummary(db, actor.id, params.conversationId),
+      {
+        params: conversationParamsSchema,
+        response: { 200: conversationSummarySchema, ...errorResponses },
       },
     )
     .get(

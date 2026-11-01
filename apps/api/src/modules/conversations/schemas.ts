@@ -23,14 +23,39 @@ export const messagePageSchema = t.Object({
   items: t.Array(messageSchema),
   nextCursor: t.Union([postgresText(), t.Null()]),
 });
-export const conversationPageSchema = t.Object({
-  items: t.Array(
+const summaryFields = {
+  id: postgresText(),
+  createdAt: postgresText({ format: "date-time" }),
+  lastActivityAt: postgresText({ format: "date-time" }),
+  latestMessage: t.Union([
     t.Object({
       id: postgresText(),
-      matchId: t.Union([postgresText(), t.Null()]),
-      projectId: t.Union([postgresText(), t.Null()]),
+      senderId: postgresText(),
+      text: postgresText(),
       createdAt: postgresText({ format: "date-time" }),
     }),
-  ),
+    t.Null(),
+  ]),
+};
+export const conversationSummarySchema = t.Union([
+  t.Object({
+    ...summaryFields,
+    kind: t.Literal("direct"),
+    matchId: postgresText(),
+    projectId: t.Null(),
+    peer: t.Object({ userId: postgresText(), displayName: postgresText() }),
+    project: t.Null(),
+  }),
+  t.Object({
+    ...summaryFields,
+    kind: t.Literal("project"),
+    matchId: t.Null(),
+    projectId: postgresText(),
+    peer: t.Null(),
+    project: t.Object({ id: postgresText(), title: postgresText() }),
+  }),
+]);
+export const conversationPageSchema = t.Object({
+  items: t.Array(conversationSummarySchema),
   nextCursor: t.Union([postgresText(), t.Null()]),
 });

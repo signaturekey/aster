@@ -3,6 +3,7 @@ import { ProductError } from "@api/lib/errors";
 import { pageOptions, pageResult, type PageQuery } from "@api/lib/pagination";
 import { sql } from "kysely";
 import { isPostgresText } from "@api/lib/strings";
+import { listConversationSummaries } from "@api/modules/conversations/summaries";
 
 export async function requireConversationMember(
   tx: SqlTransaction,
@@ -69,27 +70,7 @@ export async function listConversations(
   userId: string,
   query: PageQuery,
 ) {
-  const { cursor, limit } = pageOptions(query);
-  let statement = db
-    .selectFrom("conversations as c")
-    .innerJoin("conversation_members as m", "m.conversation_id", "c.id")
-    .select([
-      "c.id",
-      "c.match_id as matchId",
-      "c.project_id as projectId",
-      "c.created_at as createdAt",
-    ])
-    .where("m.user_id", "=", userId);
-  if (cursor)
-    statement = statement.where(
-      sql<boolean>`(c.created_at,c.id) < (${cursor.createdAt},${cursor.id})`,
-    );
-  const rows = await statement
-    .orderBy("c.created_at", "desc")
-    .orderBy("c.id", "desc")
-    .limit(limit + 1)
-    .execute();
-  return serializePage(rows, limit);
+  return listConversationSummaries(db, userId, query);
 }
 
 export async function getMessages(
