@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 export default defineConfig([
   globalIgnores(["**/dist/**", "**/coverage/**", ".claude/**", "docs/**"]),
   {
-    files: ["**/*.ts"],
+    files: ["**/*.ts", "**/*.tsx"],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     rules: {
       "@typescript-eslint/no-floating-promises": "error",
@@ -20,6 +20,7 @@ export default defineConfig([
           "./apps/*/tsconfig.json",
           "./packages/*/tsconfig.json",
           "./packages/*/tsconfig.test.json",
+          "./prototypes/*/tsconfig.json",
         ],
         tsconfigRootDir: import.meta.dirname,
       },

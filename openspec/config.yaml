@@ -4,7 +4,9 @@ context: |
   Language: English. Keep requirements and scenario headings in English.
   Aster connects IT collaborators for startups, hackathons, and side projects.
   Agreed MVP: accounts/profiles, discovery, mutual matches, projects/applications,
-  teams, and private text conversations. Backend only; do not create a web app.
+  teams, and private text conversations. The frontend-implentation-mvp change plans the separately
+  agreed real local Russian SPA and targeted API/Compose additions; frontend
+  implementation still requires explicit approval after artifact review.
   Current implementation: modular backend with implemented product modules,
   Bun workspaces apps/api, packages/api-client and packages/contracts,
   Elysia/TypeBox public schemas, Eden Treaty and PostgreSQL/Kysely + pg.
@@ -32,11 +34,11 @@ context: |
 rules:
   proposal:
     - Keep scope concise and distinguish agreed requirements from pending implementation approval.
-    - Explicitly exclude frontend, production deployment, and backlog features.
+    - Respect the selected change scope; frontend-implentation-mvp includes the agreed frontend, but production deployment and deferred backlog features remain excluded.
   specs:
     - Use SHALL or MUST and testable WHEN/THEN scenarios for every requirement.
     - Specify authorization, privacy, state transitions, and concurrent writes where relevant.
-    - Do not require browser apps or smoke/E2E suites to verify this backend change.
+    - Do not add smoke/E2E/browser test suites; frontend changes use unit checks, real PostgreSQL integration checks for backend additions and documented manual browser verification.
   design:
     - Explain workspace type propagation, runtime validation, Docker startup, and CI acceptance.
     - Separate current skeleton behavior from the agreed target; do not include historical project references.
@@ -48,7 +50,7 @@ operations:
   apply:
     guidance:
       - Wait for explicit implementation approval after the user reviews the revised documents.
-      - Use small Conventional Commits on main; push only to the approved repository after approval.
+      - Use the user's requested branch/worktree for frontend-implentation-mvp; otherwise follow the project main-branch default. Commits and pushes each require explicit authorization; implementation approval alone is not Git publication approval.
       - Run affected local checks and inspect actual GitHub Actions results; never equate local success with hosted CI success.
       - Do not add smoke/E2E suites, implement backlog items, or deploy.
   archive:

@@ -4,7 +4,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## OpenSpec workflow
 
-**Current change:** `backend-review-fixes` (isolated backend review worktree). Confirm with `openspec list --json` before starting work.
+**Current change:** `frontend-implentation-mvp` (real local frontend, planning only until explicit implementation approval). `design-interface` and `swipe-card-prototype` remain visual references; `backend-review-fixes` tracks separate backend work. Confirm with `openspec list --json` before starting work.
 
 - `openspec/specs/` contains canonical requirements for implemented product and system behavior. Read the relevant capability specs before changing that behavior.
 - `openspec/changes/<change-name>/` contains active proposals, designs, delta specs and task checklists. Read the selected change's artifacts before implementation; use `openspec status --change <change-name>` to inspect its state.
@@ -14,7 +14,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## Scope and repository map
 
-- Scope: a locally runnable backend and shared API client. Do not create `apps/web`, select a frontend framework, implement a mobile app, or deploy anything without separate approval.
+- Scope: a locally runnable backend and shared API client; `frontend-implentation-mvp` plans the separately agreed Russian-language SPA and narrowly scoped API/Compose additions. Stack selection and planning are approved, implementation is not. Read that change and wait for explicit apply approval before creating `apps/web`. Mobile apps and deployment remain excluded.
 - `apps/api/src/modules/` contains identity, profiles, discovery/matches, projects/teams and conversations. `apps/api/src/app.ts` composes the API without starting a listener; `src/index.ts` owns server startup/shutdown.
 - `apps/api/src/db/` contains the connection lifecycle, handwritten table types, SQL migrations and dictionary seed. See its README for database tooling and safety boundaries.
 - `apps/api/tests/` contains unit and real-PostgreSQL integration tests. `packages/api-client/` provides the typed Eden client; `packages/contracts/` provides browser-safe runtime contracts.
@@ -23,7 +23,7 @@ Aster helps IT people find collaborators for startups, hackathons, and side proj
 
 ## Architecture
 
-- Bun workspaces: `apps/api` and `packages/api-client`; reserve `apps/web` for later.
+- Bun workspaces: `apps/api`, `packages/api-client` and `packages/contracts`; the planned `apps/web` joins the existing root workspace/lockfile after apply approval, not as a standalone package. Frontend decisions live in `frontend-implentation-mvp`: React/TypeScript/Vite/Router, Tailwind/shadcn, Motion, React Hook Form, TanStack Query and FSD-lite. Use Eden, not Axios; no Zod initially, and add Zustand only for a demonstrated client-state need. `DESIGN.md` and `prototypes/interface` are Git-ignored local visual references during implementation; copy them explicitly into the implementation worktree when needed. Builds must not depend on them. Resolve live references before any later local deletion.
 - Modular monolith: one API process and PostgreSQL. Modules: identity, profiles, discovery/matches, projects/teams, conversations.
 - Elysia + its TypeBox schemas for request validation and explicit public responses; Eden Treaty for the client. No duplicate DTO interfaces, Zod layer, or generated OpenAPI SDK.
 - Use Kysely + pg, handwritten database types and explicit reviewed SQL migrations. Physical names are snake_case with explicit public camelCase projections, no naming plugin or codegen. Product UUID/created_at defaults come from PostgreSQL; mutations explicitly update updated_at without triggers. Preserve no-op timestamps. Normal startup/tests must never reset the working DB; any destructive database operation requires explicit, scoped approval.
