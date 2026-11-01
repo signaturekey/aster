@@ -72,7 +72,7 @@ Implementation was explicitly approved on 2026-11-01 in a separate frontend work
 - [ ] 12.1 Run the complete real two-account browser journey from empty initialization and separately from explicit development seed: register/profile/discover/match/apply/accept/transfer/remove/direct/team messages. Verify reload, conflict/error/expiry states, account isolation, multi-tab disconnect/recovery, safe retries and persistence across graceful Compose restart; record precise evidence and limitations without introducing an automated browser suite.
 - [ ] 12.2 Review all in-scope pages against visual references at 390/1440, spot-check 320/768/wide desktop and inspect screenshots, actual Cyrillic rendering, keyboard/dialog focus, reduced motion, touch scrolling and overflow; record browser/device scope and any unresolved defects rather than equating emulation with physical-device coverage.
 - [x] 12.3 Re-run all required local checks and both image builds after final fixes and preserve their actual results in the change verification record. If any check or requirement remains blocked, keep its task open and distinguish implementation completion from evidence gaps.
-- [ ] 12.4 Only after separate commit/push authorization, verify GitHub Actions succeeds for the exact latest pushed commit; record run/revision evidence. Until then leave this task open and explicitly label hosted verification unavailable/unverified.
+- [x] 12.4 Only after separate commit/push authorization, verify GitHub Actions succeeds for the exact latest pushed commit; record run/revision evidence. Until then leave this task open and explicitly label hosted verification unavailable/unverified.
 
 ## Workflow follow-up
 

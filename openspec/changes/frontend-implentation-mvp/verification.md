@@ -54,4 +54,12 @@ Inspected headless Chromium on this macOS machine, not a physical phone or other
 - Graceful `docker compose stop` followed by `up -d --wait web` preserved both session and a committed message. No volume deletion/down-v/reset was used.
 - Aged only the current inspection sessions in the dedicated dev database, then verified renewal through both localhost:5175 Vite and localhost:8180 Caddy: JSON returned 200 with HttpOnly renewal cookies, SSE returned 200. Origin/CSRF checks stayed enabled.
 - Incomplete seeded Nina could enter the requested catalogue after sign-in. A deliberately injected 422 on profile save preserved the entered text. Signing out and into Anna removed Nina's view; another person's professional page and unavailable-ID recovery were inspected without foreign email fields. Server privacy/invariant integration checks also passed.
-- Remaining: full empty-database browser journey separately from the seeded journey, complete manual accessibility/motion/long-list matrix, and hosted CI after separately authorized commits/push. These remain open rather than inferred from the passing slices.
+- Remaining at local verification time: full empty-database browser journey separately from the seeded journey, complete manual accessibility/motion/long-list matrix, and hosted CI after separately authorized commits/push. The hosted boundary was subsequently verified below; manual acceptance gaps remain open.
+
+## Hosted verification — 2026-11-01
+
+- User explicitly authorized committing and pushing to verify the hosted task. Frontend commits were fast-forwarded to main; the README removal and obsolete placeholder cleanup were committed separately.
+- Latest pushed revision verified: `c70a98871cb47a9106c5b714c56dfc9f9c12ad28` (`main`). Local HEAD and remote main matched this revision when checked.
+- GitHub Actions **Application checks** run [41287165906](https://github.com/signaturekey/aster/actions/runs/41287165906) completed with **success** for that exact SHA.
+- Successful steps include frozen install, ESLint/Prettier, workspace types, unit tests, isolated PostgreSQL setup/migrations/integration tests, API/client/web builds, Compose validation and both API/web Docker image builds. No publication or deployment occurred.
+- Task 12.4 is verified. This does not complete the remaining manual/product acceptance tasks. These local evidence edits are not a claim that a later, unverified pushed revision is green.
