@@ -1,0 +1,59 @@
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/fraunces/500-italic.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/manrope/600.css";
+@import "tailwindcss";
+
+@theme {
+  --color-background: #faf9f5;
+  --color-foreground: #141413;
+  --color-card: #ffffff;
+  --color-muted: #e8e6dc;
+  --color-muted-foreground: #64635c;
+  --color-border: #dcd9ce;
+  --color-primary: #d97757;
+  --color-primary-foreground: #141413;
+  --color-accent: #e8e6dc;
+  --font-sans:
+    "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    system-ui, sans-serif;
+  --font-display: "Fraunces", "Plus Jakarta Sans", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+}
+
+@layer base {
+  body {
+    margin: 0;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid #a84d32;
+    outline-offset: 4px;
+  }
+}
+
+.wordmark {
+  font-family: "Manrope", var(--font-sans);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.065em;
+  text-decoration: none;
+}
+
+.wordmark span {
+  color: #d97757;
+}
