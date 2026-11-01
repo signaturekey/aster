@@ -1,0 +1,35 @@
+.messenger-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.conversation-list-scroll {
+  max-height: 60dvh;
+}
+.conversation-detail {
+  display: none;
+}
+.thread-selected .conversation-list {
+  display: none;
+}
+.thread-selected .conversation-detail {
+  display: block;
+}
+.message-history {
+  height: 48dvh;
+  scrollbar-gutter: stable;
+}
+@media (min-width: 768px) {
+  .messenger-layout {
+    grid-template-columns: minmax(240px, 32%) minmax(0, 1fr);
+  }
+  .conversation-detail,
+  .thread-selected .conversation-list {
+    display: block;
+  }
+  .conversation-list-scroll {
+    max-height: 75dvh;
+  }
+  .message-history {
+    height: 50dvh;
+  }
+}
