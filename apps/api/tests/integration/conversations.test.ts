@@ -178,7 +178,12 @@ test("conversation routes deny anonymous and nonmembers without private fields",
   expect(Object.keys(list.items[0]).sort()).toEqual([
     "createdAt",
     "id",
+    "kind",
+    "lastActivityAt",
+    "latestMessage",
     "matchId",
+    "peer",
+    "project",
     "projectId",
   ]);
   // Existing chats do not require discovery completeness or opt-in.
@@ -638,10 +643,12 @@ test("an in-flight event delivery rechecks membership after waiting for a racing
   });
   const streams = createConversationStreams(instrumented);
   const abort = new AbortController();
-  const response = streams.connect(member.id, session.id, abort.signal);
-  if (!response.body) throw new Error("Missing SSE body");
-  const reader = response.body.getReader();
-  await reader.read();
+  const readers = Array.from({ length: 2 }, () => {
+    const response = streams.connect(member.id, session.id, abort.signal);
+    if (!response.body) throw new Error("Missing SSE body");
+    return response.body.getReader();
+  });
+  for (const reader of readers) await reader.read();
   let unlock!: () => void;
   let locked!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -690,7 +697,8 @@ test("an in-flight event delivery rechecks membership after waiting for a racing
       messageId: permitted.id,
     });
     // If the revoked event leaked it would be first in this same FIFO reader.
-    expect((await nextEvent(reader)).messageId).toBe(permitted.id);
+    for (const reader of readers)
+      expect((await nextEvent(reader)).messageId).toBe(permitted.id);
   } finally {
     unlock();
     abort.abort();
@@ -698,19 +706,24 @@ test("an in-flight event delivery rechecks membership after waiting for a racing
   }
 });
 
-test("live delivery closes expired and signed-out sessions; replacement and cancellation clean up", async () => {
+test("live delivery closes all expired session tabs and signed-out sessions; cancellation cleans up", async () => {
   const [a, b] = await Promise.all([register(), register()]);
   const conversation = await direct(a.id, b.id);
   const first = await stream(b.cookie);
   const second = await stream(b.cookie);
-  expect((await first.reader.read()).done).toBe(true);
+  const live = await (await send(conversation.id, a.cookie)).json();
+  expect((await nextEvent(first.reader)).messageId).toBe(live.id);
+  expect((await nextEvent(second.reader)).messageId).toBe(live.id);
   await db
     .updateTable("sessions")
     .set({ expires_at: new Date(0) })
     .where("user_id", "=", b.id)
     .execute();
   await send(conversation.id, a.cookie);
+  expect((await first.reader.read()).done).toBe(true);
   expect((await second.reader.read()).done).toBe(true);
+  first.abort.abort();
+  second.abort.abort();
   const c = await register();
   const other = await direct(a.id, c.id);
   const signedOut = await stream(c.cookie);
@@ -1073,10 +1086,11 @@ test("reconnecting cannot accumulate detached blocked SSE transactions", async (
       });
       completions.push(completion);
       if (replacement < entered.length) await entered[replacement]!.promise;
-      else {
-        await completion;
-        expect((await reader.read()).done).toBe(true);
-      }
+      else await completion;
+      // Multiple tabs no longer implicitly replace each other. Model reconnect
+      // churn with explicit client cancellation while its SQL remains blocked.
+      await reader.cancel();
+      expect((await reader.read()).done).toBe(true);
     }
     expect(sessionQueries).toBe(8);
   } finally {
@@ -1086,4 +1100,245 @@ test("reconnecting cannot accumulate detached blocked SSE transactions", async (
     streams.close();
   }
   expect(sessionQueries).toBe(8);
+});
+
+test("SSE route refuses a ninth same-account tab with 429 without evicting eight healthy tabs", async () => {
+  const [a, b] = await Promise.all([register(), register()]);
+  const conversation = await direct(a.id, b.id);
+  const streams = createConversationStreams(db);
+  const isolated = new Elysia({ normalize: false }).group("/api/v1", (app) =>
+    app.use(conversationRoutes(db, auth, [origin], streams)),
+  );
+  const abort = new AbortController();
+  const open = () =>
+    isolated.handle(
+      new Request(`${origin}/api/v1/events`, {
+        headers: { cookie: b.cookie, origin },
+        signal: abort.signal,
+      }),
+    );
+  const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
+  try {
+    for (let i = 0; i < 8; i++) {
+      const response = await open();
+      expect(response.status).toBe(200);
+      const reader = response.body!.getReader();
+      readers.push(reader);
+      await reader.read();
+    }
+    const refused = await open();
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("content-type")).toContain("application/json");
+    expect((await refused.json()).error.code).toBe("SSE_CAPACITY_EXCEEDED");
+    const committed = await (await send(conversation.id, a.cookie)).json();
+    await streams.publish({
+      type: "message.created",
+      conversationId: conversation.id,
+      messageId: committed.id,
+    });
+    for (const reader of readers)
+      expect((await nextEvent(reader)).messageId).toBe(committed.id);
+    await readers[0]!.cancel();
+    const replacement = await open();
+    expect(replacement.status).toBe(200);
+    const reader = replacement.body!.getReader();
+    readers.push(reader);
+    await reader.read();
+    expect((await open()).status).toBe(429);
+  } finally {
+    abort.abort();
+    streams.close();
+  }
+  for (const reader of readers) expect((await reader.read()).done).toBe(true);
+});
+
+test("each tab rechecks its own session under a racing revocation without closing another session", async () => {
+  const [a, b] = await Promise.all([register(), register()]);
+  const conversation = await direct(a.id, b.id);
+  const firstSession = await db
+    .selectFrom("sessions")
+    .select("id")
+    .where("user_id", "=", b.id)
+    .executeTakeFirstOrThrow();
+  const secondSession = { id: crypto.randomUUID() };
+  await db
+    .insertInto("sessions")
+    .values({
+      id: secondSession.id,
+      user_id: b.id,
+      token: crypto.randomUUID(),
+      expires_at: new Date(Date.now() + 60_000),
+      ip_address: null,
+      user_agent: null,
+    })
+    .execute();
+  let racing = false;
+  let attempts = 0;
+  const waiting = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const locked = Promise.withResolvers<void>();
+  const streams = createConversationStreams(
+    observeQueries(db, {
+      before(query) {
+        if (
+          racing &&
+          query.sql.includes('from "sessions"') &&
+          query.sql.endsWith("for share") &&
+          query.parameters[0] === secondSession.id
+        ) {
+          if (++attempts === 2) waiting.resolve();
+        }
+      },
+    }),
+  );
+  const abort = new AbortController();
+  const readers = [
+    firstSession,
+    firstSession,
+    secondSession,
+    secondSession,
+  ].map((session) =>
+    streams.connect(b.id, session.id, abort.signal).body!.getReader(),
+  );
+  const completions: Promise<void>[] = [];
+  let revocation: Promise<void> | undefined;
+  try {
+    for (const reader of readers) await reader.read();
+    const initial = {
+      type: "message.created" as const,
+      conversationId: conversation.id,
+      messageId: "all-tabs",
+    };
+    await streams.publish(initial);
+    for (const reader of readers)
+      expect((await nextEvent(reader)).messageId).toBe(initial.messageId);
+    revocation = db.transaction().execute(async (tx) => {
+      await tx
+        .selectFrom("sessions")
+        .select("id")
+        .where("id", "=", secondSession.id)
+        .forUpdate()
+        .execute();
+      locked.resolve();
+      await release.promise;
+      await tx
+        .deleteFrom("sessions")
+        .where("id", "=", secondSession.id)
+        .execute();
+    });
+    await locked.promise;
+    racing = true;
+    const delivery = streams.publish({
+      ...initial,
+      messageId: "racing-session-revoke",
+    });
+    completions.push(delivery);
+    // Both tabs must reach the actual PostgreSQL lock before deletion commits.
+    // A cached/user-wide session decision cannot establish this invariant.
+    await waiting.promise;
+    release.resolve();
+    await revocation;
+    await delivery;
+    for (const reader of readers.slice(2))
+      expect((await reader.read()).done).toBe(true);
+    for (const reader of readers.slice(0, 2))
+      expect((await nextEvent(reader)).messageId).toBe("racing-session-revoke");
+    expect(attempts).toBe(2);
+
+    const foreignSession = await db
+      .selectFrom("sessions")
+      .select("id")
+      .where("user_id", "=", a.id)
+      .executeTakeFirstOrThrow();
+    const mismatched = streams
+      .connect(b.id, foreignSession.id, abort.signal)
+      .body!.getReader();
+    await mismatched.read();
+    await streams.publish({ ...initial, messageId: "ownership-check" });
+    expect((await mismatched.read()).done).toBe(true);
+    for (const reader of readers.slice(0, 2))
+      expect((await nextEvent(reader)).messageId).toBe("ownership-check");
+    await db
+      .updateTable("sessions")
+      .set({ expires_at: new Date(0) })
+      .where("id", "=", firstSession.id)
+      .execute();
+    await streams.publish({ ...initial, messageId: "expired" });
+    for (const reader of readers) expect((await reader.read()).done).toBe(true);
+  } finally {
+    release.resolve();
+    abort.abort();
+    streams.close();
+    await revocation;
+    await Promise.all(completions);
+  }
+});
+
+test("multi-tab fan-out caps active authorizations at eight and closes only excess work", async () => {
+  const [a, b] = await Promise.all([register(), register()]);
+  const conversation = await direct(a.id, b.id);
+  const sessions = await db
+    .selectFrom("sessions")
+    .select(["id", "user_id"])
+    .where("user_id", "in", [a.id, b.id])
+    .execute();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let queries = 0;
+  const streams = createConversationStreams(
+    observeQueries(db, {
+      async after(query) {
+        if (
+          query.sql.includes('from "sessions"') &&
+          query.sql.endsWith("for share")
+        ) {
+          if (++queries === 8) entered.resolve();
+          await release.promise;
+        }
+      },
+    }),
+  );
+  const abort = new AbortController();
+  const readers = sessions.flatMap((session, index) =>
+    Array.from({ length: index === 0 ? 5 : 4 }, () =>
+      streams
+        .connect(session.user_id, session.id, abort.signal)
+        .body!.getReader(),
+    ),
+  );
+  let completion: Promise<void> | undefined;
+  try {
+    for (const reader of readers) await reader.read();
+    const event = {
+      type: "message.created" as const,
+      conversationId: conversation.id,
+      messageId: "global-overload",
+    };
+    completion = streams.publish(event);
+    await entered.promise;
+    expect(queries).toBe(8);
+    const results = readers.map((reader) => reader.read());
+    // All permitted SQL remains paused, so the first resolved read must be the
+    // refused ninth delivery, not an eviction of one of the eight active tabs.
+    expect((await Promise.race(results)).done).toBe(true);
+    release.resolve();
+    await completion;
+    const frames = await Promise.all(results);
+    expect(frames.filter((frame) => frame.done)).toHaveLength(1);
+    for (const frame of frames.filter((frame) => !frame.done))
+      expect(new TextDecoder().decode(frame.value)).toContain(event.messageId);
+    expect(queries).toBe(8);
+    await streams.publish({ ...event, messageId: "healthy-tabs-survive" });
+    for (const [index, frame] of frames.entries())
+      if (!frame.done)
+        expect((await nextEvent(readers[index]!)).messageId).toBe(
+          "healthy-tabs-survive",
+        );
+    expect(queries).toBe(16);
+  } finally {
+    release.resolve();
+    abort.abort();
+    streams.close();
+    await completion;
+  }
 });

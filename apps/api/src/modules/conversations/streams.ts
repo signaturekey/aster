@@ -1,9 +1,11 @@
 import type { SqlDatabase } from "@api/db/kysely";
 import type { ConversationEvent } from "@api/events";
-import { ProductError } from "@api/lib/errors";
+import { errorBody, ProductError } from "@api/lib/errors";
 import { logUnexpectedError } from "@api/lib/diagnostics";
 import { requireConversationMember } from "@api/modules/conversations/service";
 
+const MAX_STREAMS_PER_USER = 8;
+const MAX_STREAMS = 128;
 const MAX_QUEUED_EVENTS = 32;
 // Leave capacity in the default ten-connection pool for HTTP and recipient lookup.
 const MAX_ACTIVE_DELIVERIES = 8;
@@ -22,7 +24,8 @@ type Connection = {
 // Deliberately single-instance and lossy: bounded connections are not an outbox.
 // HTTP history is authoritative; consumers deduplicate notifications by messageId.
 export function createConversationStreams(db: SqlDatabase) {
-  const connections = new Map<string, Connection>();
+  const connections = new Map<string, Set<Connection>>();
+  let connectionCount = 0;
   const publications: PendingEvent[] = [];
   let selecting = false;
   let stopped = false;
@@ -45,7 +48,7 @@ export function createConversationStreams(db: SqlDatabase) {
     try {
       await db.transaction().execute(async (tx) => {
         // Pool acquisition and row locks may wait past disconnect. Never start
-        // the next query or enqueue a frame for a closed/replaced connection.
+        // the next query or enqueue a frame for a disconnected stream.
         if (!connection.active()) return;
         await tx
           .selectFrom("sessions")
@@ -104,7 +107,20 @@ export function createConversationStreams(db: SqlDatabase) {
 
   function connect(userId: string, sessionId: string, signal: AbortSignal) {
     if (stopped) return new Response(null, { status: 503 });
-    connections.get(userId)?.close();
+    // Reserve synchronously, before creating an SSE response. A new tab must
+    // never evict healthy tabs or bypass the instance limit with another user.
+    if (
+      (connections.get(userId)?.size ?? 0) >= MAX_STREAMS_PER_USER ||
+      connectionCount >= MAX_STREAMS
+    ) {
+      return Response.json(
+        errorBody(
+          "SSE_CAPACITY_EXCEEDED",
+          "Message event stream capacity exceeded",
+        ),
+        { status: 429 },
+      );
+    }
     let controller: ReadableStreamDefaultController<Uint8Array>;
     let timer: ReturnType<typeof setInterval> | undefined;
     let closed = false;
@@ -118,7 +134,9 @@ export function createConversationStreams(db: SqlDatabase) {
       for (const item of pending.splice(0)) item.done();
       if (timer) clearInterval(timer);
       signal.removeEventListener("abort", close);
-      if (connections.get(userId) === connection) connections.delete(userId);
+      const userConnections = connections.get(userId);
+      if (userConnections?.delete(connection)) connectionCount--;
+      if (!userConnections?.size) connections.delete(userId);
       try {
         controller.close();
       } catch {
@@ -143,7 +161,7 @@ export function createConversationStreams(db: SqlDatabase) {
     const connection: Connection = {
       sessionId,
       close,
-      active: () => !closed && connections.get(userId) === connection,
+      active: () => !closed && !!connections.get(userId)?.has(connection),
       schedule(event) {
         if (closed) return Promise.resolve();
         if (pending.length >= MAX_QUEUED_EVENTS) {
@@ -168,7 +186,11 @@ export function createConversationStreams(db: SqlDatabase) {
       {
         start(value) {
           controller = value;
-          connections.set(userId, connection);
+          const userConnections =
+            connections.get(userId) ?? new Set<Connection>();
+          userConnections.add(connection);
+          connections.set(userId, userConnections);
+          connectionCount++;
           signal.addEventListener("abort", close, { once: true });
           if (signal.aborted) close();
           else {
@@ -204,7 +226,11 @@ export function createConversationStreams(db: SqlDatabase) {
       while (!stopped && publications.length) {
         const publication = publications.shift();
         if (!publication) break;
-        const current = new Map(connections);
+        // Snapshot individual streams, not the mutable sets: a tab opened during
+        // recipient lookup recovers through HTTP rather than receiving old work.
+        const current = new Map(
+          [...connections].map(([userId, streams]) => [userId, [...streams]]),
+        );
         const userIds = [...current.keys()];
         if (!userIds.length) {
           publication.done();
@@ -219,12 +245,13 @@ export function createConversationStreams(db: SqlDatabase) {
             .execute();
           // Do not stall subsequent recipient lookups behind one blocked client.
           // Each connection owns a bounded serial delivery queue of its own.
-          const deliveries = members.map(({ userId }) => {
-            const connection = current.get(userId);
-            return connection?.active()
-              ? connection.schedule(publication.event)
-              : Promise.resolve();
-          });
+          const deliveries = members.flatMap(({ userId }) =>
+            (current.get(userId) ?? []).map((connection) =>
+              connection.active()
+                ? connection.schedule(publication.event)
+                : Promise.resolve(),
+            ),
+          );
           void Promise.all(deliveries).then(publication.done);
         } catch (error) {
           logUnexpectedError(error, { operation: "sse.recipients" });
@@ -245,7 +272,8 @@ export function createConversationStreams(db: SqlDatabase) {
       if (publications.length >= MAX_QUEUED_EVENTS) {
         // Recipient lookup itself may be blocked. Bound ingress as well as each
         // recipient queue; force history recovery rather than retaining work.
-        for (const connection of connections.values()) connection.close();
+        for (const userConnections of connections.values())
+          for (const connection of userConnections) connection.close();
         for (const item of publications.splice(0)) item.done();
         return Promise.resolve();
       }
@@ -257,7 +285,8 @@ export function createConversationStreams(db: SqlDatabase) {
     close() {
       stopped = true;
       for (const item of publications.splice(0)) item.done();
-      for (const connection of connections.values()) connection.close();
+      for (const userConnections of connections.values())
+        for (const connection of userConnections) connection.close();
     },
   };
 }
