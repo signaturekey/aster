@@ -41,8 +41,8 @@ services:
       NODE_ENV: production
       PORT: "3000"
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-aster-local-only-secret-change-before-any-sharing-123}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-http://localhost:3000}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:8080}
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-http://localhost:8080}
       DATABASE_URL: postgresql://${POSTGRES_USER:-aster}:${POSTGRES_PASSWORD:-aster_local_password}@db:5432/aster
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"
@@ -52,6 +52,29 @@ services:
     init: true
     stop_signal: SIGTERM
     stop_grace_period: 30s
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "const r = await fetch('http://localhost:3000/health'); process.exit(r.ok ? 0 : 1)",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    init: true
 
   test-db:
     image: postgres:18.3

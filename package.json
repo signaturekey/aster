@@ -13,7 +13,9 @@
   "scripts": {
     "dev": "bun run --filter @aster/api dev",
     "start": "bun run --filter @aster/api start",
-    "build": "bun run build:api && bun run build:client",
+    "build": "bun run build:api && bun run build:client && bun run build:web",
+    "build:web": "bun run --filter @aster/web build",
+    "dev:web": "bun run --filter @aster/web dev",
     "build:api": "bun run --filter @aster/api build",
     "build:client": "bun run scripts/build-client.ts",
     "check": "bun --bun eslint . --max-warnings 0 && prettier . --check",
@@ -21,9 +23,10 @@
     "typecheck": "tsc --noEmit && bun run --filter '*' typecheck",
     "db:migrate": "bun apps/api/src/db/commands.ts migrate",
     "db:seed": "bun apps/api/src/db/commands.ts seed",
+    "db:seed:dev": "bun apps/api/src/db/dev-seed-command.ts",
     "test:integration": "bun scripts/test-integration.ts",
     "test": "bun run test:unit",
-    "test:unit": "bun test apps/api/tests/unit packages/api-client/tests",
+    "test:unit": "bun test apps/api/tests/unit packages/api-client/tests apps/web/src",
     "test:watch": "bun test --watch apps/api/tests/unit packages/api-client/tests"
   },
   "devDependencies": {

@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package.json bun.lock ./
 COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
 COPY packages/api-client/package.json ./packages/api-client/package.json
 COPY packages/contracts/package.json ./packages/contracts/package.json
 
@@ -33,3 +34,12 @@ USER bun
 EXPOSE 3000
 STOPSIGNAL SIGTERM
 CMD ["bun", "apps/api/dist/index.js"]
+
+FROM dependencies AS web-build
+COPY . .
+RUN bun run build:web
+
+FROM caddy:2.10.2-alpine AS web
+COPY apps/web/Caddyfile /etc/caddy/Caddyfile
+COPY --from=web-build /app/apps/web/dist /srv
+EXPOSE 80

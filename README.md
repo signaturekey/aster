@@ -1,6 +1,6 @@
 # Aster
 
-Бэкенд платформы для поиска напарников и команд для стартапов, хакатонов и пет-проектов.
+Платформа для поиска напарников и команд для стартапов, хакатонов и пет-проектов: русский SPA и типизированный API в Bun-монорепозитории.
 
 ## Возможности
 
@@ -14,7 +14,7 @@
 
 ## Стек
 
-Bun · TypeScript · Elysia · Eden · PostgreSQL · Kysely · Better Auth
+Bun · TypeScript · React · Vite · Tailwind CSS/shadcn · React Hook Form · TanStack Query · Elysia/Eden · PostgreSQL/Kysely · Better Auth · Caddy
 
 ## Запуск через Docker
 
@@ -25,8 +25,17 @@ cp -n .env.example .env
 docker compose up --build
 ```
 
-API: `http://localhost:3000`. Проверка доступности: `GET /health`.
-Настройки портов и окружения — в `.env.example`.
+Приложение: **http://localhost:8080**. Caddy отдаёт SPA и проксирует `/api/*` и `/health` в API; миграции и справочники запускаются до API. Bun на хосте не нужен. PostgreSQL сохраняется в named volume; обычный старт не добавляет демоданные.
+
+Настройки — в `.env.example`. При смене `WEB_PORT` обновите `BETTER_AUTH_URL` и `TRUSTED_ORIGINS` под тот же внешний адрес. Существующий `.env` не перезаписывается: проверьте старые значения `localhost:3000` вручную. API отдельно доступен на loopback-порту 3000, но браузер использует единый адрес приложения.
+
+Необязательное тестовое наполнение реальной БД — только явной командой:
+
+```sh
+docker compose run --rm --no-deps migrate bun run db:seed:dev --acknowledge-local-aster=db:5432/aster
+```
+
+Локальные аккаунты, пароли и политика безопасного повторного запуска описаны в [development seed](apps/api/dev-seed.md). Не публикуйте стенд с известными тестовыми паролями. Сидер не сбрасывает БД и не восстанавливает изменённые/удалённые данные.
 
 Остановка без удаления данных:
 
@@ -44,8 +53,12 @@ bun install --frozen-lockfile
 docker compose up -d --wait db
 bun run db:migrate
 bun run db:seed
-bun run dev
+BETTER_AUTH_URL=http://localhost:5175 TRUSTED_ORIGINS=http://localhost:5175 bun run dev
+# В другом терминале:
+bun run dev:web
 ```
+
+Откройте **http://localhost:5175**, не `127.0.0.1`: origin и cookies должны совпадать. Vite проксирует API на порт 3000; для другого порта задайте `API_PROXY_TARGET=http://127.0.0.1:<порт>` при запуске `dev:web`. Подробности и архитектура — [apps/web](apps/web/README.md). Локальные прототипы и `DESIGN.md` не нужны для сборки.
 
 Основные команды:
 
@@ -54,7 +67,7 @@ bun run check          # ESLint + Prettier: линтинг и проверка �
 bun run check:fix      # Автоисправления ESLint и форматирование Prettier
 bun run typecheck      # Проверка типов
 bun run test:unit      # Unit-тесты
-bun run build          # Сборка API и клиента
+bun run build          # Сборка API, browser-safe клиента и SPA
 ```
 
 Integration-тесты с отдельной тестовой БД:

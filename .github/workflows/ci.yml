@@ -1,4 +1,4 @@
-name: Backend checks
+name: Application checks
 
 on:
   push:
@@ -62,9 +62,11 @@ jobs:
           bun run db:seed
       - name: PostgreSQL integration tests
         run: bun run test:integration
-      - name: API and browser-safe client builds
+      - name: API, browser-safe client and web builds
         run: bun run build
       - name: Validate Compose configuration
         run: docker compose --profile test config --quiet
       - name: Build API Docker image (no publication)
         run: docker build --target runtime --tag aster-api:ci .
+      - name: Build web Docker image (no publication)
+        run: docker build --target web --tag aster-web:ci .
